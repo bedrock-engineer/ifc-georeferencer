@@ -6,11 +6,14 @@ import {
   DialogTrigger,
   Input,
   Label,
+  OverlayArrow,
   Popover,
   RadioGroup,
   Switch,
   Text,
   TextField,
+  Tooltip,
+  TooltipTrigger,
 } from "react-aria-components";
 import { PlusIcon } from "@radix-ui/react-icons";
 import { Button } from "../../input/button";
@@ -238,12 +241,25 @@ function AddCustomBasemapButton({
 }: AddCustomBasemapButtonProps) {
   return (
     <DialogTrigger>
-      <AriaButton
-        aria-label="Add custom basemap"
-        className="flex size-5 cursor-pointer items-center justify-center rounded text-slate-500 outline-none hover:bg-slate-100 hover:text-slate-900 data-focus-visible:ring-2 data-focus-visible:ring-slate-500"
-      >
-        <PlusIcon />
-      </AriaButton>
+      <TooltipTrigger delay={300}>
+        <AriaButton
+          aria-label="Add custom basemap"
+          className="flex size-5 cursor-pointer items-center justify-center rounded text-slate-500 outline-none hover:bg-slate-100 hover:text-slate-900 aria-expanded:bg-slate-200 aria-expanded:text-slate-900 data-focus-visible:ring-2 data-focus-visible:ring-slate-500"
+        >
+          <PlusIcon />
+        </AriaButton>
+        <Tooltip
+          placement="top"
+          className="max-w-xs rounded bg-slate-900 px-2 py-1 text-xs text-white shadow-md data-entering:animate-in data-entering:fade-in data-exiting:animate-out data-exiting:fade-out"
+        >
+          <OverlayArrow>
+            <svg width={8} height={8} viewBox="0 0 8 8" className="fill-slate-900">
+              <path d="M0 0 L4 4 L8 0" />
+            </svg>
+          </OverlayArrow>
+          Add a custom basemap
+        </Tooltip>
+      </TooltipTrigger>
       <Popover
         placement="bottom end"
         className="w-72 rounded border border-slate-200 bg-white p-3 shadow-md outline-none"
