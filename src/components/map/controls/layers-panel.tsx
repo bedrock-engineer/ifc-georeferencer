@@ -264,6 +264,16 @@ function AddCustomBasemapButton({
         placement="bottom end"
         className="w-72 rounded border border-slate-200 bg-white p-3 shadow-md outline-none"
       >
+        <OverlayArrow>
+          <svg
+            width={12}
+            height={8}
+            viewBox="0 0 12 8"
+            className="fill-white stroke-slate-200"
+          >
+            <path d="M0 8 L6 0 L12 8" />
+          </svg>
+        </OverlayArrow>
         <Dialog className="outline-none">
           {({ close }) => (
             <AddCustomBasemapForm
