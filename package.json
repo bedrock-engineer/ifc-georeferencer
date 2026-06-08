@@ -64,9 +64,9 @@
     "ml-levenberg-marquardt": "^5.0.1",
     "neverthrow": "^8.2.0",
     "proj4": "^2.20.8",
-    "react": "^19.2.6",
+    "react": "^19.2.7",
     "react-aria-components": "^1.17.0",
-    "react-dom": "^19.2.6",
+    "react-dom": "^19.2.7",
     "three": "^0.183.2",
     "web-ifc": "^0.0.77",
     "zod": "^4.4.3"
