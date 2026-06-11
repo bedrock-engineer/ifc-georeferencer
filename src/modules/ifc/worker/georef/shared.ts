@@ -47,6 +47,17 @@ export interface RawProjectedCrs {
     | "absent"
     | "recovered-from-scale"
     | "malformed-fallback";
+  /**
+   * MapUnit resolved to metres-per-unit — the *exact* factor the reader
+   * used to convert this entity's Eastings/Northings/OrthogonalHeight into
+   * canonical metres (so it already reflects the absent→METRE,
+   * recovered-from-scale, and IFC2X3-ePset→project-unit decisions). The UI
+   * pairs it with the project length factor to show the literal
+   * `IfcMapConversion.Scale` that a save will write, since the editable
+   * scale field holds the dimensionless geometric value (metres in /
+   * metres out) and the on-disk Scale is that × this unit ratio.
+   */
+  metresPerUnit: number;
 }
 
 /**

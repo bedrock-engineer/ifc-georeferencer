@@ -12,7 +12,7 @@
 
 import { type IfcAPI, IFCPROJECT, IFCRELAGGREGATES, IFCSITE } from "web-ifc";
 import type { HelmertParams } from "#modules/helmert/solve";
-import { unitToMetres } from "#modules/units/convert";
+import { mapConversionUnitFactor, unitToMetres } from "#modules/units/convert";
 
 /**
  * Returns the flattened first entity of a given type, or null if there are none.
@@ -130,33 +130,11 @@ export function isTrivialHelmert(h: HelmertParams): boolean {
   return h.easting === 0 && h.northing === 0;
 }
 
-/**
- * The `IfcMapConversion.Scale` unit-conversion ratio: source-unit (IFC
- * project length unit) ↔ MapUnit. Codebase canonical is dimensionless
- * geometric scale (metres in, metres out — see `modules/helmert/solve.ts`),
- * but IFC stores Scale as this dimensionful ratio. Read inverts; write
- * applies:
- *
- *     on_disk = internal × onDiskScaleRatio(ifc, map)
- *     internal = on_disk / onDiskScaleRatio(ifc, map)
- *
- * Worked cases:
- *   - mm IFC + METRE map: ratio = 0.001 (an identity transform writes 0.001)
- *   - metric IFC + METRE map: ratio = 1 (identity writes 1)
- *   - metric IFC + FOOT map: ratio = 1/0.3048 ≈ 3.28
- *   - IFC2X3 ePset (no MapUnit, callers pass map = ifc): ratio = 1, Scale
- *     round-trips unchanged
- *
- * Skipping this conversion shrinks the rendered model by 1000× for an mm
- * project + METRE MapUnit — the 3D layer disappears and the footprint
- * collapses to a dot.
- */
-export function onDiskScaleRatio(
-  ifcMetresPerUnit: number,
-  mapUnitMetresPerUnit: number,
-): number {
-  return ifcMetresPerUnit / mapUnitMetresPerUnit;
-}
+// `mapConversionUnitFactor` (the IfcMapConversion.Scale unit-conversion ratio) lives
+// in the units module so both the worker and React cards can call it without
+// pulling web-ifc into the component bundle. Re-exported here so the worker's
+// existing `../shared` importers resolve unchanged.
+export { mapConversionUnitFactor } from "#modules/units/convert";
 
 /**
  * Build HelmertParams from the six raw numeric fields read off either an
@@ -174,7 +152,7 @@ export function onDiskScaleRatio(
  *    `mapUnitMetresPerUnit = ifcMetresPerUnit`.)
  *
  * 2. **`Scale`** — strip the on-disk source-unit/MapUnit ratio via
- *    `onDiskScaleRatio` (see above) to land in dimensionless canonical.
+ *    `mapConversionUnitFactor` (see above) to land in dimensionless canonical.
  */
 export function buildHelmertFromFields(
   fields: {
@@ -201,7 +179,7 @@ export function buildHelmertFromFields(
   const { mapUnitMetresPerUnit, ifcMetresPerUnit } = units;
   const scale =
     Number(fields.scale ?? 1) /
-    onDiskScaleRatio(ifcMetresPerUnit, mapUnitMetresPerUnit);
+    mapConversionUnitFactor(ifcMetresPerUnit, mapUnitMetresPerUnit);
   const factorX = Number(fields.factorX ?? 1);
   const factorY = Number(fields.factorY ?? 1);
   const factorZ = Number(fields.factorZ ?? 1);
@@ -239,29 +217,15 @@ export function nameToMetresPerUnit(
   prefix: string,
   name: string,
 ): number | null {
-  const fullName = `${prefix}${name}`;
-  switch (fullName) {
-    case "METRE": {
-      return 1;
-    }
-    case "MILLIMETRE": {
-      return 0.001;
-    }
-    case "CENTIMETRE": {
-      return 0.01;
-    }
-    case "DECIMETRE": {
-      return 0.1;
-    }
-    case "KILOMETRE": {
-      return 1000;
-    }
+  // IfcSIUnit: the prefix-combined form ("MILLI" + "METRE") is itself a key
+  // in LENGTH_UNITS. IfcConversionBasedUnit: prefix is empty, so this first
+  // lookup is the bare name and the fallback never fires.
+  const combined = unitToMetres(`${prefix}${name}`);
+  if (combined.isOk()) {
+    return combined.value;
   }
-  const conv = unitToMetres(name);
-  if (conv.isOk()) {
-    return conv.value;
-  }
-  return null;
+  const bare = unitToMetres(name);
+  return bare.isOk() ? bare.value : null;
 }
 
 /**

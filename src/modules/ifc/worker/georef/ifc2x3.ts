@@ -73,8 +73,11 @@ export function readGeorefIfc2x3(
     projectedCrsID == null
       ? {}
       : readPsetProperties(ifcAPI, modelID, projectedCrsID);
+      
   const rawProjectedCrs =
-    projectedCrsID == null ? null : readRawProjectedCrsIfc2x3(crsProperties);
+    projectedCrsID == null
+      ? null
+      : readRawProjectedCrsIfc2x3(crsProperties, ifcMetresPerUnit);
 
   if (mapConvID == null) {
     return absentGeorefRead(rawProjectedCrs);
@@ -126,6 +129,9 @@ export function readGeorefIfc2x3(
     // pset's MapUnit property is missing/blank, and the IFC2X3 reader
     // falls back to project units (not METRE — see source-card label).
     mapUnitStatus: "absent" as const,
+    // ePset_MapConversion E/N/H are in project units, so the factor used
+    // to reach canonical metres is the project's (Scale round-trips at 1).
+    metresPerUnit: ifcMetresPerUnit,
   };
 
   return classifyGeorefRead({
@@ -151,6 +157,7 @@ export function readGeorefIfc2x3(
 
 function readRawProjectedCrsIfc2x3(
   crsProperties: Record<string, unknown>,
+  ifcMetresPerUnit: number,
 ): RawProjectedCrs {
   // ePset_ProjectedCRS mirrors the IFC4 IfcProjectedCRS attributes as
   // free-form properties; readers in the wild may write any subset.
@@ -167,6 +174,9 @@ function readRawProjectedCrsIfc2x3(
     // ePset has no malformed-shift problem (it's a free-form pset, not
     // an IfcSIUnit entity reference). Only two states: present or absent.
     mapUnitStatus: mapUnit == null ? "absent" : "explicit",
+    // The IFC2X3 reader converts ePset E/N/H with the project factor
+    // (no MapUnit concept), so that's the factor the UI must pair with.
+    metresPerUnit: ifcMetresPerUnit,
   };
 }
 

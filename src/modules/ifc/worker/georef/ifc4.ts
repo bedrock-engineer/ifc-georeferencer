@@ -26,7 +26,7 @@ import {
   isMapUnitAbsent,
   isMapUnitNameMissing,
   nameToMetresPerUnit,
-  onDiskScaleRatio,
+  mapConversionUnitFactor,
   rawValue,
   readMapUnitMetresPerUnit,
   rotationToAxisPair,
@@ -84,6 +84,7 @@ export function readGeorefIfc4(
   // until we find a line GetLine can actually resolve; the deleted
   // entries return undefined.
   const mc = firstResolvableLine(ifcAPI, modelID, ids, /* flatten */ true);
+  
   if (!mc) {
     // No MapConversion. If we have a usable RigidOp-derived georef, it
     // drives the anchor; otherwise return the absent shape. Either way
@@ -99,6 +100,7 @@ export function readGeorefIfc4(
     }
     return { ...absentGeorefRead(null), rawRigidOperation };
   }
+
   const target: any = mc.TargetCRS;
   const rawSourceCrs = readRawSourceCrsIfc4(mc.SourceCRS);
   const onDiskScale = optionalNumber(mc.Scale, 1);
@@ -107,6 +109,7 @@ export function readGeorefIfc4(
   const onDiskE = optionalNumber(mc.Eastings, 0);
   const onDiskN = optionalNumber(mc.Northings, 0);
   const onDiskH = optionalNumber(mc.OrthogonalHeight, 0);
+
   // Eastings/Northings/OrthogonalHeight live in IfcProjectedCRS.MapUnit,
   // not in the IFC project's length unit (see Revit-authored mm files
   // that nonetheless write Eastings in metres because MapUnit=METRE).
@@ -117,12 +120,19 @@ export function readGeorefIfc4(
     ifcMetresPerUnit,
     onDiskScale,
   );
+
   const mapUnitStatus = computeMapUnitStatus({
     target,
     mapUnitMetresPerUnit,
     ifcMetresPerUnit,
   });
-  const rawProjectedCrs = readRawProjectedCrsIfc4(target, mapUnitStatus);
+
+  const rawProjectedCrs = readRawProjectedCrsIfc4(
+    target,
+    mapUnitStatus,
+    mapUnitMetresPerUnit,
+  );
+
   switch (mapUnitStatus) {
     case "absent": {
       emitLog({
@@ -292,7 +302,11 @@ function readRigidOperationIfc4(
     mapUnitMetresPerUnit,
     ifcMetresPerUnit,
   });
-  const rawProjectedCrs = readRawProjectedCrsIfc4(target, mapUnitStatus);
+  const rawProjectedCrs = readRawProjectedCrsIfc4(
+    target,
+    mapUnitStatus,
+    mapUnitMetresPerUnit,
+  );
 
   const helmert: HelmertParams = {
     easting: raw.firstCoordinate * mapUnitMetresPerUnit,
@@ -349,6 +363,7 @@ function readRawSourceCrsIfc4(source: any): RawSourceCrs | null {
 function readRawProjectedCrsIfc4(
   target: any,
   mapUnitStatus: RawProjectedCrs["mapUnitStatus"],
+  mapUnitMetresPerUnit: number,
 ): RawProjectedCrs | null {
   if (!target) {
     return null;
@@ -363,6 +378,7 @@ function readRawProjectedCrsIfc4(
     mapZone: optionalString(target.MapZone),
     mapUnit: readMapUnitLabel(target.MapUnit),
     mapUnitStatus,
+    metresPerUnit: mapUnitMetresPerUnit,
   };
 }
 
@@ -468,7 +484,7 @@ export function writeGeorefIfc4(
   // params the dispatcher in writeMapConversion picks the Scaled writer.
   const onDiskScale =
     parameters.xScale *
-    onDiskScaleRatio(ifcMetresPerUnit, setup.mapUnitMetresPerUnit);
+    mapConversionUnitFactor(ifcMetresPerUnit, setup.mapUnitMetresPerUnit);
 
   const [easting, northing, height] = lengthTripleInMapUnit(
     ifcAPI,
@@ -528,7 +544,7 @@ export function writeGeorefIfc4Scaled(
   // Per spec, effective per-axis scale on disk is Scale × Factor<axis>.
   // Scale carries the source-unit → MapUnit ratio (no geometric component);
   // FactorX/Y/Z carry the dimensionless geometric scales (typically 1.0).
-  const onDiskScale = onDiskScaleRatio(
+  const onDiskScale = mapConversionUnitFactor(
     ifcMetresPerUnit,
     setup.mapUnitMetresPerUnit,
   );

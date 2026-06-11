@@ -1,5 +1,6 @@
 import type { HelmertParams } from "#modules/helmert/solve";
 import type { IfcMetadata } from "#modules/ifc/worker";
+import { mapConversionUnitFactor } from "#modules/units/convert";
 import { Card } from "../card";
 import { NumberField } from "../number-field";
 import { ProvenanceBadge, type Provenance } from "../provenance-badge";
@@ -9,6 +10,10 @@ interface RotationCardProps {
   provenance: Provenance;
   onParametersChange: (next: HelmertParams) => void;
   metadata: IfcMetadata;
+}
+
+function formatScale(n: number): string {
+  return Number.parseFloat(n.toFixed(6)).toString();
 }
 
 export function RotationCard({
@@ -51,6 +56,28 @@ export function RotationCard({
   // edit the file in another tool to change it.
   const hasAsymmetricXY =
     parameters !== null && parameters.xScale !== parameters.yScale;
+
+  // The scale fields edit the dimensionless geometric scale (metres in /
+  // metres out). The file stores it multiplied by the project-unit → MapUnit
+  // ratio, so a "1" here can land as "0.001" in IfcMapConversion.Scale.
+  // Surface the literal on-disk value ONLY when the units diverge — when the
+  // project is already in MapUnit the note would just restate the input.
+  // The MapUnit factor is the exact one the worker used for E/N/H (already
+  // reflects absent→METRE / ePset→project-unit), so no re-derivation here.
+  const mapMetresPerUnit = metadata.rawProjectedCrs?.metresPerUnit ?? 1;
+  const unitFactor = mapConversionUnitFactor(metadata.metresPerUnit, mapMetresPerUnit);
+  const mapUnit = metadata.rawProjectedCrs?.mapUnit;
+
+  function writtenScaleNote(geometricScale: number | null): string | null {
+    if (geometricScale == null || unitFactor === 1) {
+      return null;
+    }
+    const written = geometricScale * unitFactor;
+    const unitCause = mapUnit
+      ? ` (${metadata.lengthUnit} → ${mapUnit})`
+      : "";
+    return `↳ Writes ${formatScale(written)} to file${unitCause}`;
+  }
 
   function setIsotropicScale(value: number) {
     if (!parameters) {
@@ -99,6 +126,17 @@ export function RotationCard({
             convenience.
           </p>
 
+          <p>
+            The <strong>Scale</strong> field is the dimensionless geometric
+            scale: <code>1</code> means no resizing, other values stretch the
+            model to fit your control points. The file stores this in{" "}
+            <code>IfcMapConversion.Scale</code> multiplied by the ratio between
+            your project length unit and the CRS map unit, so a millimetre
+            project with a metre-based CRS writes <code>0.001</code> for an
+            identity scale. When the two values differ, the note under the field
+            shows what actually gets written.
+          </p>
+
           {isIfc43 && (
             <p>
               IFC 4.3 scales each axis independently via{" "}
@@ -144,7 +182,7 @@ export function RotationCard({
               description={
                 hasAsymmetricXY
                   ? `↳ FactorX ${parameters.xScale} · FactorY ${parameters.yScale} (file-authored anisotropy; not editable here)`
-                  : "↳ FactorX · FactorY"
+                  : writtenScaleNote(parameters?.xScale ?? null)
               }
             />
             
@@ -155,7 +193,7 @@ export function RotationCard({
               isDisabled={!hasParams}
               step={0.0001}
               formatOptions={{ maximumFractionDigits: 6 }}
-              description="↳ FactorZ"
+              description={writtenScaleNote(parameters?.zScale ?? null)}
             />
           </>
         ) : (
@@ -166,6 +204,7 @@ export function RotationCard({
             isDisabled={!hasParams}
             step={0.0001}
             formatOptions={{ maximumFractionDigits: 6 }}
+            description={writtenScaleNote(parameters?.xScale ?? null)}
           />
         )}
       </div>
