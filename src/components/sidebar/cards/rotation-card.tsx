@@ -90,13 +90,25 @@ export function RotationCard({
       title="Rotation & scale"
       headerAside={<ProvenanceBadge provenance={provenance} />}
       help={
-        <p>
-          The model's rotation around the vertical axis, written as{" "}
-          <code>XAxisAbscissa</code> / <code>XAxisOrdinate</code>; the direction
-          the local +X axis points in the target CRS. The{" "}
-          <strong>Rotation</strong> field shows the same value in degrees for
-          convenience.
-        </p>
+        <>
+          <p>
+            The model's rotation around the vertical axis, written as{" "}
+            <code>XAxisAbscissa</code> / <code>XAxisOrdinate</code>; the
+            direction the local +X axis points in the target CRS. The{" "}
+            <strong>Rotation</strong> field shows the same value in degrees for
+            convenience.
+          </p>
+
+          {isIfc43 && (
+            <p>
+              IFC 4.3 scales each axis independently via{" "}
+              <code>IfcMapConversionScaled</code>'s <code>FactorX/Y/Z</code>.{" "}
+              <strong>Horizontal scale</strong> sets <code>FactorX</code> and{" "}
+              <code>FactorY</code> together; <strong>Vertical scale</strong>{" "}
+              sets <code>FactorZ</code>.
+            </p>
+          )}
+        </>
       }
     >
       <div className="space-y-2">
@@ -131,10 +143,11 @@ export function RotationCard({
               formatOptions={{ maximumFractionDigits: 6 }}
               description={
                 hasAsymmetricXY
-                  ? `↳ X ${parameters.xScale} · Y ${parameters.yScale} (file-authored anisotropy; not editable here)`
-                  : null
+                  ? `↳ FactorX ${parameters.xScale} · FactorY ${parameters.yScale} (file-authored anisotropy; not editable here)`
+                  : "↳ FactorX · FactorY"
               }
             />
+            
             <NumberField
               label="Vertical scale"
               value={parameters?.zScale ?? null}
@@ -142,6 +155,7 @@ export function RotationCard({
               isDisabled={!hasParams}
               step={0.0001}
               formatOptions={{ maximumFractionDigits: 6 }}
+              description="↳ FactorZ"
             />
           </>
         ) : (
