@@ -3,8 +3,9 @@
 Georeference an IFC file in your browser. Place the model on a map or
 enter your survey points, and download a georeferenced IFC file.
 
-**Your file never leaves your machine.** Everything runs client-side.
-Files are not uploaded, and no account is required.
+**Your IFC file is never uploaded.** Parsing, georeferencing, and writing
+all happen in your browser, and no account is required. (The app does reach
+the network for basemaps, address search, and datum-shift grids.)
 
 ## What it does
 
@@ -18,7 +19,7 @@ Bridging Geo and BIM today usually takes a specialist and a workflow that
 mainstream authoring tools don't support, which makes georeferencing
 impractical on small and medium projects. This tool aims to make the step
 routine: open a file, place it, save it, with the right IFC entities written
-in. It's built for the buildingSMART NL
+in. It's built for the buildingSMART the Netherlands
 [Georefereren IFC](https://www.buildingsmart.nl/projecten/georefereren-ifc)
 initiative.
 
@@ -38,11 +39,10 @@ The workflow:
    `IfcSite`, pick a point on the map, or paste surveyed correspondences
    (engineering XYZ ↔ projected XYZ) and solve a Helmert fit. Nudge easting /
    northing / height and rotation by hand; the map updates as you type.
-4. **See it in place** on a real basemap (aerial / topo) with optional 3D BAG
-   buildings, AHN terrain, and a live Three.js preview of your model
-   transformed by the current Helmert parameters.
+4. **See it in place** the outline on a real basemap with optional overlays, or a 3D preview of your model
+   transformed by the current georeferencing parameters.
 5. **Save.** The writer rewrites `IfcMapConversion` + `IfcProjectedCRS`
-   in-browser and hands you the georeferenced IFC back as a download.
+   in-browser and hands you the georeferenced IFC file back as a download.
 
 ## Features
 
@@ -59,17 +59,17 @@ The workflow:
 - **Precision grids on demand.** CRSs whose default proj4 string is inaccurate
   (e.g. RD New, OSGB36) fetch a GeoTIFF datum-shift grid from cdn.proj.org. The
   Target CRS card shows accuracy state and lets you retry a failed load. The
-  CRS index itself ships with the app, so EPSG lookup works offline.
+  CRS index itself ships with the app.
 - **Address search.** PDOK Locatieserver autocomplete for NL, Nominatim
   elsewhere, for placing the model when you have no coordinate to anchor to.
 - **Maps and overlays.** OpenStreetMap, PDOK topo (BRT) and aerial
   (Luchtfoto), or your own raster XYZ / MapLibre style URL. NL overlays: BGT
   topography, Kadaster parcels, 2D and 3D BAG, and the model's own `IfcSpace`
   boundaries. A 2D ↔ 3D toggle renders the model on the globe.
-- **Sidecar files.** Export the active CRS, vertical datum, and Helmert
-  parameters as a small `.ifcgref.json`, then re-apply it to another file to
-  reuse a placement without re-solving.
-- **Demo model.** MiniBIM is preloaded so you can try the workflow without a
+- **Georeferencing property files.** Export the active CRS, vertical datum, and Helmert
+  parameters as a small `.ifcgref.json`, then re-apply it to another file in this app to
+  reuse a georeference without manually entry.
+- **Demo model.** The MiniBIM model is available so you can try the workflow without a
   file of your own.
 
 ## Standards
@@ -92,14 +92,9 @@ Follows the two relevant practice guides:
 ## Limitations
 
 - **Datum accuracy outside grid coverage.** We use proj4js with
-  GeoTIFF-format datum-shift grids for the CRSs that need them (NL, UK,
-  …). Other CRSs use the default proj4 string, which is fine for typical BIM georeferencing (sub-metre) but may lose precision vs. PROJ/pyproj
-  on complex datums.
+  GeoTIFF-format datum-shift grids for the CRSs that need them (NL, BE, LUX). Other CRSs use the default proj4 string, which is fine for typical BIM georeferencing (sub-metre) but may lose precision vs. PROJ/pyproj on complex datums. Feel free to open an issue or PR for support for more datum shift grids.
 - **No vertical-datum transforms.** Heights round-trip as a single
   `OrthogonalHeight` offset. proj4js can't transform between vertical datums (NAP ↔ ellipsoidal etc.).
-- **First-load needs internet.** The CRS index ships with the app, but
-  precision grids are pulled from cdn.proj.org on first use of a covered
-  CRS. Once cached they work offline.
 - **Large files.** web-ifc runs in a webworker, but opening a multi-GB
   IFC file is still constrained by browser memory.
 
@@ -130,7 +125,7 @@ React 19 + TypeScript + Vite; Tailwind CSS v4; react-aria-components;
 [web-ifc](https://github.com/ThatOpen/engine_web-ifc) (WASM) in a Web Worker via [Comlink](https://github.com/googlechromelabs/comlink); [proj4js](https://github.com/proj4js/proj4js) for CRS transforms,
 with on-demand GeoTIFF precision grids using [geotiff.js](https://geotiffjs.github.io/); [Zod](https://zod.dev/) for boundary
 validation; [ml-levenberg-marquardt](https://github.com/mljs/levenberg-marquardt) for the Helmert solver; [MapLibre GL
-JS](https://maplibre.org/maplibre-gl-js/docs/) + Three.js for the map and 3D view; [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS) for [3D BAG](https://docs.3dbag.nl/en/);
+JS](https://maplibre.org/maplibre-gl-js/docs/) for the map. Three.js for the 3D view; [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS) for 3DTiles from [3D BAG](https://docs.3dbag.nl/en/);
 [neverthrow](https://github.com/supermacro/neverthrow) `Result` for error handling.
 
 ### Layout
@@ -151,6 +146,6 @@ Apache License Version 2.0.
 ## Credits
 
 Developed by [Bedrock.engineer](https://bedrock.engineer) for the
-[buildingSMART Nederland](https://www.buildingsmart.nl/) [Georefereren IFC](https://www.buildingsmart.nl/projecten/georefereren-ifc).
+[buildingSMART Nederland](https://www.buildingsmart.nl/) [Georefereren IFC](https://www.buildingsmart.nl/projecten/georefereren-ifc) project.
 
 Inspiration taken from the original [IfcGref app](https://ifcgref.bk.tudelft.nl/) by [Amir Hakim](https://github.com/amiroo4) for the TU Delft 3D Geoinformation research group.
