@@ -1,7 +1,6 @@
 /**
  * `useState` that mirrors itself into `localStorage` so the value survives
- * page reloads. Three things it does that the typical `useStickyState`
- * snippet does not:
+ * page reloads. 
  *
  *   1. Optional Zod schema. localStorage is a system boundary — the stored
  *      payload could be from an older app version with a different shape,
@@ -30,6 +29,7 @@ interface UseStickyStateOptions<T> {
    * outweighs the safety.
    */
   schema?: ZodType<T>;
+  syncFromOtherTabs?: boolean;
 }
 
 export function useStickyState<T>(
@@ -37,7 +37,7 @@ export function useStickyState<T>(
   defaultValue: T | (() => T),
   options: UseStickyStateOptions<T> = {},
 ): [T, Dispatch<SetStateAction<T>>] {
-  const { schema } = options;
+  const { schema, syncFromOtherTabs = false } = options;
 
   const [value, setValue] = useState<T>(() =>
     readSticky(key, defaultValue, schema),
@@ -55,7 +55,10 @@ export function useStickyState<T>(
   );
 
   useEffect(
-    function syncFromOtherTabs() {
+    function readSyncFromOtherTabs() {
+      if (!syncFromOtherTabs) {
+        return;
+      }
       function onStorage(event: StorageEvent) {
         if (event.key !== key || event.newValue === null) {
           return;
@@ -79,7 +82,7 @@ export function useStickyState<T>(
         globalThis.removeEventListener("storage", onStorage);
       };
     },
-    [key, schema],
+    [key, schema, syncFromOtherTabs],
   );
 
   return [value, setValue] as const;
