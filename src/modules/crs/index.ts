@@ -23,6 +23,7 @@ export {
   type TransformError,
 } from "./transform";
 export { projectLocalToWgs84, type LngLat } from "./project-local";
+export { mapRotationCorrection } from "./map-rotation";
 export { deriveCrsViewTarget, type CrsViewTarget } from "./view-target";
 export { parseEpsgCode } from "./parse";
 export {

@@ -1,6 +1,10 @@
 import maplibregl, { type Map as MlMap, type Marker } from "maplibre-gl";
 import { type RefObject, useEffect, useRef } from "react";
-import { transformProjectedToWgs84, type CrsDef } from "#modules/crs";
+import {
+  mapRotationCorrection,
+  transformProjectedToWgs84,
+  type CrsDef,
+} from "#modules/crs";
 import type { HelmertParams } from "#modules/helmert/solve";
 import {
   AXES_LINE_LAYER_ID,
@@ -19,6 +23,15 @@ export interface AxesGeometry {
   yTip: [number, number];
   nTip: [number, number];
   rotationDegrees: number;
+  /**
+   * Grid convergence at the origin: the signed angle (degrees) between grid
+   * north (the blue N arrow) and the map's up direction (true north).
+   * Positive = grid north leans east of map up, negative = west. Large for
+   * oblique projections — which is why the N arrow visibly diverges from
+   * screen-up while `rotationDegrees` (measured against grid north) reads a
+   * clean value. `0` when the convergence probe fails.
+   */
+  convergenceDegrees: number;
 }
 
 /**
@@ -59,12 +72,20 @@ export function computeAxesGeometry(
   if (!origin || !xTip || !yTip || !nTip) {
     return null;
   }
+  // `mapRotationCorrection` returns −γ (the angle added to the model rotation
+  // to convert grid north → true north), so the convergence γ itself is its
+  // negation.
+  const correction = mapRotationCorrection(activeCrs, easting, northing);
+  const convergenceDegrees = correction.isOk()
+    ? (-correction.value * 180) / Math.PI
+    : 0;
   return {
     origin,
     xTip,
     yTip,
     nTip,
     rotationDegrees: (rotation * 180) / Math.PI,
+    convergenceDegrees,
   };
 }
 
@@ -215,12 +236,25 @@ function syncLabels(
     IFC_Y_AXIS_COLOR,
     geometry.yTip,
   );
+  // The blue N arrow points to grid north, which diverges from map up by the
+  // grid convergence. Label that divergence right on the arrow so it doesn't
+  // read as a bug, and explain the full relationship on hover.
+  const convergence = geometry.convergenceDegrees;
+  const hasConvergence = Math.abs(convergence) >= 0.05;
+  const convergenceText = hasConvergence
+    ? `${Math.abs(convergence).toFixed(1)}°${convergence < 0 ? "W" : "E"}`
+    : "";
   markersRef.current.n = upsertLabel(
     map,
     markersRef.current.n,
-    "N",
+    hasConvergence ? `N ${convergenceText}` : "N",
     NORTH_AXIS_COLOR,
     geometry.nTip,
+    {
+      title: hasConvergence
+        ? `Grid north — ${convergenceText} from map up (grid convergence).`
+        : "Grid north (aligned with map up here).",
+    },
   );
   markersRef.current.angle = upsertLabel(
     map,
@@ -228,12 +262,22 @@ function syncLabels(
     `${geometry.rotationDegrees.toFixed(2)}°`,
     "#1f2937",
     geometry.origin,
-    { offsetY: 18 },
+    {
+      offsetY: 18,
+      title:
+        `Model rotation ${geometry.rotationDegrees.toFixed(2)}° clockwise from grid north.` +
+        (hasConvergence
+          ? ` Grid north itself is ${convergenceText} of map up (grid convergence), ` +
+            `so the blue N arrow won't point straight up.`
+          : ""),
+    },
   );
 }
 
 interface LabelOptions {
   offsetY?: number;
+  /** Native hover tooltip. Also makes the label hoverable (pointer-events). */
+  title?: string;
 }
 
 function upsertLabel(
@@ -249,6 +293,9 @@ function upsertLabel(
     if (element.textContent !== text) {
       element.textContent = text;
     }
+    if (options.title !== undefined && element.title !== options.title) {
+      element.title = options.title;
+    }
     element.style.color = color;
     element.style.borderColor = color;
     current.setLngLat(lngLat);
@@ -256,6 +303,9 @@ function upsertLabel(
   }
   const element = document.createElement("div");
   element.textContent = text;
+  if (options.title !== undefined) {
+    element.title = options.title;
+  }
   element.style.cssText = [
     "font: 600 11px/1 system-ui, sans-serif",
     `color: ${color}`,
@@ -264,7 +314,8 @@ function upsertLabel(
     "border-radius: 3px",
     `border: 1px solid ${color}`,
     "box-shadow: 0 1px 2px rgba(0,0,0,0.15)",
-    "pointer-events: none",
+    // Labels with a tooltip need to receive hover; the rest stay click-through.
+    options.title === undefined ? "pointer-events: none" : "cursor: help",
     "white-space: nowrap",
   ].join(";");
   const marker = new maplibregl.Marker({

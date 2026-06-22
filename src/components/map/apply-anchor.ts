@@ -1,5 +1,9 @@
 import type { Map as MlMap } from "maplibre-gl";
-import { projectLocalToWgs84, type CrsDef } from "#modules/crs";
+import {
+  mapRotationCorrection,
+  projectLocalToWgs84,
+  type CrsDef,
+} from "#modules/crs";
 import type { HelmertParams, XYZ } from "#modules/helmert/solve";
 import { emitLog } from "../../lib/log";
 import type { ThreeDLayer } from "./layers/three-d-layer";
@@ -68,10 +72,24 @@ export function applyAnchor(
     altitudeSource = "OrthogonalHeight";
   }
   const absoluteAltitude = baseAltitude + meshOrigin.z;
+  // The 3D layer renders in web mercator (up = true north); `parameters.rotation`
+  // is measured against the projected CRS's grid north. Correct for the grid
+  // convergence at the anchor so the model overlays the per-vertex-projected 2D
+  // footprint. Falls back to 0 (no correction) if the probe fails to unproject.
+  const correction = mapRotationCorrection(
+    activeCrs,
+    parameters.easting,
+    parameters.northing,
+  );
+
+  const rotationCorrection = correction.isOk() ? correction.value : 0;
+  
   layer.update(
     { lng: ll.longitude, lat: ll.latitude, altitude: absoluteAltitude },
     parameters,
+    rotationCorrection,
   );
+
   if (flyCamera) {
     map.flyTo({
       center: [ll.longitude, ll.latitude],
@@ -80,7 +98,8 @@ export function applyAnchor(
       duration: 500,
     });
   }
+
   emitLog({
-    message: `3D model anchored at ${ll.longitude.toFixed(6)}, ${ll.latitude.toFixed(6)} (alt=${absoluteAltitude.toFixed(2)}m via ${altitudeSource}, scale=${parameters.xScale.toFixed(4)}, rot=${parameters.rotation.toFixed(4)} rad, meshOrigin=(${meshOrigin.x.toFixed(2)}, ${meshOrigin.y.toFixed(2)}, ${meshOrigin.z.toFixed(2)}))`,
+    message: `3D model anchored at ${ll.longitude.toFixed(6)}, ${ll.latitude.toFixed(6)} (alt=${absoluteAltitude.toFixed(2)}m via ${altitudeSource}, scale=${parameters.xScale.toFixed(4)}, rot=${parameters.rotation.toFixed(4)} rad, grid-convergence=${((rotationCorrection * 180) / Math.PI).toFixed(3)}°, meshOrigin=(${meshOrigin.x.toFixed(2)}, ${meshOrigin.y.toFixed(2)}, ${meshOrigin.z.toFixed(2)}))`,
   });
 }

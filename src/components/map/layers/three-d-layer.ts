@@ -102,6 +102,7 @@ export interface ThreeDLayer {
   update(
     anchor: { lng: number; lat: number; altitude: number },
     parameters: HelmertParams,
+    mapRotationCorrection: number,
   ): void;
   /** Toggle visibility of IfcSpace meshes (translucent room volumes). */
   setSpacesVisible(visible: boolean): void;
@@ -283,10 +284,18 @@ function createMeshMaterial(mesh: MeshExtract): THREE.MeshLambertMaterial {
  *
  * The mesh's +Y (north) maps onto mercator -Y (mercator Y grows southward),
  * so Y gets negated in the scale.
+ *
+ * `mapRotationCorrection` (radians) is added to the Helmert rotation: the
+ * Helmert `rotation` is measured against the projected CRS's grid north, but
+ * this matrix lives in the web-mercator frame whose up is true north. The two
+ * differ by the grid convergence at the anchor (large for oblique projections
+ * like Czech Krovák), so without it the model renders rotated off the
+ * per-vertex-projected 2D footprint. See modules/crs/map-rotation.ts.
  */
 function buildModelMatrix(
   anchor: Anchor,
   parameters: HelmertParams,
+  mapRotationCorrection: number,
 ): THREE.Matrix4 {
   const merc = maplibregl.MercatorCoordinate.fromLngLat(
     [anchor.lng, anchor.lat],
@@ -301,7 +310,11 @@ function buildModelMatrix(
   return new THREE.Matrix4()
     .makeTranslation(merc.x, merc.y, merc.z)
     .scale(new THREE.Vector3(sx, -sy, sz))
-    .multiply(new THREE.Matrix4().makeRotationZ(parameters.rotation));
+    .multiply(
+      new THREE.Matrix4().makeRotationZ(
+        parameters.rotation + mapRotationCorrection,
+      ),
+    );
 }
 
 /**
@@ -320,6 +333,7 @@ export function createThreeDLayer(): ThreeDLayer {
   // Latest anchor + params. See buildModelMatrix — we rebuild each frame.
   let currentAnchor: Anchor | null = null;
   let currentParameters: HelmertParams | null = null;
+  let currentMapRotationCorrection = 0;
   let hasMeshes = false;
   let diagnosticFramesLogged = 0;
   // Parallel list of IfcSpace child meshes so setSpacesVisible can flip
@@ -363,7 +377,11 @@ export function createThreeDLayer(): ThreeDLayer {
         return;
       }
 
-      const modelMatrix = buildModelMatrix(currentAnchor, currentParameters);
+      const modelMatrix = buildModelMatrix(
+        currentAnchor,
+        currentParameters,
+        currentMapRotationCorrection,
+      );
       // MapLibre v5: the mercator-space projection matrix is
       // `defaultProjectionData.mainMatrix`. The top-level
       // `modelViewProjectionMatrix` is for pixel-space rendering and has a
@@ -519,11 +537,12 @@ export function createThreeDLayer(): ThreeDLayer {
       mapReference?.triggerRepaint();
     },
 
-    update(anchor, parameters) {
+    update(anchor, parameters, mapRotationCorrection) {
       if (DEBUG) {
         console.log("[3d-layer] update:", {
           anchor,
           parameters,
+          mapRotationCorrection,
           xScale: parameters.xScale,
           yScale: parameters.yScale,
           zScale: parameters.zScale,
@@ -531,6 +550,7 @@ export function createThreeDLayer(): ThreeDLayer {
       }
       currentAnchor = anchor;
       currentParameters = parameters;
+      currentMapRotationCorrection = mapRotationCorrection;
       mapReference?.triggerRepaint();
     },
 
