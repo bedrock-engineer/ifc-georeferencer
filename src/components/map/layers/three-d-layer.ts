@@ -139,13 +139,13 @@ function createLitScene(): { scene: THREE.Scene; modelGroup: THREE.Group } {
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
 
-  scene.add(new THREE.AmbientLight(0xff_ff_ee, 0.9));
+  scene.add(new THREE.AmbientLight(0xFF_FF_EE, 0.9));
 
-  const dir1 = new THREE.DirectionalLight(0xff_ff_ff, 2);
+  const dir1 = new THREE.DirectionalLight(0xFF_FF_FF, 2);
   dir1.position.set(1, 1, 1);
   scene.add(dir1);
 
-  const dir2 = new THREE.DirectionalLight(0xff_ff_ff, 1.2);
+  const dir2 = new THREE.DirectionalLight(0xFF_FF_FF, 1.2);
   dir2.position.set(-1, 0.5, -1);
   scene.add(dir2);
 
@@ -507,7 +507,7 @@ export function createThreeDLayer(): ThreeDLayer {
         const cubeSize = Math.max(size.x, size.y, size.z) * 0.3;
         const debugCube = new THREE.Mesh(
           new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize),
-          new THREE.MeshBasicMaterial({ color: 0xff_00_ff, wireframe: true }),
+          new THREE.MeshBasicMaterial({ color: 0xFF_00_FF, wireframe: true }),
         );
         debugCube.frustumCulled = false;
         modelGroup.add(debugCube);

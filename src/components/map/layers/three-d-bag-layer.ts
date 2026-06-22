@@ -38,9 +38,9 @@ export function createThreeDBagLayer(): ThreeDBagLayer {
   const id = "bag3d-tiles";
 
   const scene = new THREE.Scene();
-  scene.add(new THREE.AmbientLight(0xff_ff_ff, 2.5));
+  scene.add(new THREE.AmbientLight(0xFF_FF_FF, 2.5));
 
-  const dir = new THREE.DirectionalLight(0xff_ff_ff, 1.2);
+  const dir = new THREE.DirectionalLight(0xFF_FF_FF, 1.2);
   dir.position.set(1, 1, 1);
   scene.add(dir);
 

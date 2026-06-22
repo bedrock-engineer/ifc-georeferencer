@@ -549,7 +549,7 @@ export function writeGeorefIfc4Scaled(
     setup.mapUnitMetresPerUnit,
   );
 
-  const [e, n, h] = lengthTripleInMapUnit(
+  const [east, north, height] = lengthTripleInMapUnit(
     ifcAPI,
     modelID,
     parameters,
@@ -564,9 +564,9 @@ export function writeGeorefIfc4Scaled(
     IFCMAPCONVERSIONSCALED,
     new Handle(setup.sourceContextID),
     setup.projectedCRS,
-    e,
-    n,
-    h,
+    east,
+    north,
+    height,
     ifcAPI.CreateIfcType(modelID, IFCREAL, setup.xAxisAbscissa),
     ifcAPI.CreateIfcType(modelID, IFCREAL, setup.xAxisOrdinate),
     ifcAPI.CreateIfcType(modelID, IFCREAL, onDiskScale),

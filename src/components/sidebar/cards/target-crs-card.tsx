@@ -151,9 +151,9 @@ function DegradedOverrideBadge({ code, accuracy }: DegradedOverrideBadgeProps) {
   const [isRetrying, startRetryTransition] = useTransition();
   const label = isRetrying
     ? "Retrying…"
-    : retryable
+    : (retryable
       ? "Retry grid load"
-      : "Cannot retry — file an issue";
+      : "Cannot retry — file an issue");
   return (
     <div className="space-y-1 border border-red-300 bg-red-50 p-2 text-red-800">
       <div>⚠ {accuracy.note}</div>

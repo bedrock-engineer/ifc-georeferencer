@@ -100,9 +100,9 @@ export function RigidOperationSection({
             value={
               raw.height == null
                 ? "—" // prettier-ignore
-                : role === "active"
+                : (role === "active"
                   ? `${trimZeros(raw.height, 3)} ${mapUnitShort}`
-                  : trimZeros(raw.height, 3)
+                  : trimZeros(raw.height, 3))
             }
           />
           <Row label="TargetCRS" value={raw.targetCrsName ?? "—"} />
