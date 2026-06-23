@@ -9,6 +9,7 @@ import { getIfc } from "../../../ifc-api";
 import { applyAnchor } from "../apply-anchor";
 import type { ViewMode } from "../controls/view-toggle";
 import type { ThreeDLayer } from "../layers/three-d-layer";
+import { TERRAIN_CONFIG } from "../style";
 
 interface ThreeDState {
   view: ViewMode;
@@ -61,8 +62,21 @@ export function useThreeDLayer(
 
     if (view !== "3d") {
       setIsLoading(false);
+      // Terrain is a 3D-only concern. Clearing it in 2D keeps the flat view
+      // on MapLibre's plain raster path, which avoids the terrain
+      // render-to-texture bug that leaves the basemap unpainted after a
+      // programmatic camera jump. See style.ts.
+      if (map.getTerrain()) {
+        map.setTerrain(null);
+      }
       teardown(map, threeDRef, meshOriginRef);
       return;
+    }
+
+    // Entering 3D: drape needs the DEM, and applyAnchor samples it via
+    // queryTerrainElevation. Set it before setup runs.
+    if (!map.getTerrain()) {
+      map.setTerrain(TERRAIN_CONFIG);
     }
 
     // MapView disables the 3D toggle when these are missing, so reaching

@@ -373,7 +373,10 @@ export function frameCamera(
     for (const point of validFootprint) {
       bounds.extend(point);
     }
-    map.fitBounds(bounds, { padding: 40, duration, maxZoom: 19 });
+    // Cap the fit: a small footprint (e.g. a single garage) would otherwise
+    // pin to the basemap's max zoom and fill the screen with no surrounding
+    // context. 18 keeps the building plus its immediate neighbours in view.
+    map.fitBounds(bounds, { padding: 40, duration, maxZoom: 18 });
     return;
   }
 

@@ -66,12 +66,25 @@ function buildStyle(): StyleSpecification {
     layers.push({ ...overlay.layer, layout: { visibility: "none" } });
   }
 
+  // Terrain is intentionally NOT set here. It's only needed in the 3D view
+  // (drape + `queryTerrainElevation` for model placement), and enabling it in
+  // the flat 2D view triggers a MapLibre bug: after a programmatic camera jump
+  // (e.g. framing a loaded model) the terrain render-to-texture pass leaves the
+  // basemap raster unpainted until the user pans/zooms. So `useThreeDLayer`
+  // toggles terrain on entering 3D via `setTerrain(TERRAIN_CONFIG)` and clears
+  // it on returning to 2D. The DEM source still lives in `sources` so
+  // `setTerrain` can reference it by id.
   return {
     version: 8,
     sources,
-    terrain: { source: TERRAIN.sourceId, exaggeration: 1 },
     layers,
   };
 }
+
+/** Terrain config applied via `map.setTerrain` in 3D view (see above). */
+export const TERRAIN_CONFIG = {
+  source: TERRAIN.sourceId,
+  exaggeration: 1,
+} as const;
 
 export const STYLE: StyleSpecification = buildStyle();
