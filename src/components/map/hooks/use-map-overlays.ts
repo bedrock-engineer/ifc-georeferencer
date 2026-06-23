@@ -153,11 +153,7 @@ function createMarkerElement(
   label.style.position = "absolute";
   label.style.top = "100%";
   label.style.left = "50%";
-  // The mapConversion marker coincides with the axes origin, whose rotation-
-  // angle label sits ~18px below centre. Drop this label further so the two
-  // don't overlap; the site marker has no axes under it, so it stays tight.
-  const labelGap = source === "mapConversion" ? 22 : 4;
-  label.style.transform = `translate(-50%, ${labelGap}px)`;
+  label.style.transform = "translate(-50%, 4px)";
   label.style.fontSize = "10px";
   label.style.lineHeight = "1";
   label.style.fontWeight = "500";

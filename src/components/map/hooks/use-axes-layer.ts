@@ -22,14 +22,13 @@ export interface AxesGeometry {
   xTip: [number, number];
   yTip: [number, number];
   nTip: [number, number];
-  rotationDegrees: number;
   /**
    * Grid convergence at the origin: the signed angle (degrees) between grid
-   * north (the blue N arrow) and the map's up direction (true north).
+   * north (the blue arrow) and the map's up direction (true north).
    * Positive = grid north leans east of map up, negative = west. Large for
-   * oblique projections — which is why the N arrow visibly diverges from
-   * screen-up while `rotationDegrees` (measured against grid north) reads a
-   * clean value. `0` when the convergence probe fails.
+   * oblique projections — which is why the arrow visibly diverges from
+   * screen-up even when the model rotation is a clean value. `0` when the
+   * convergence probe fails.
    */
   convergenceDegrees: number;
 }
@@ -84,7 +83,6 @@ export function computeAxesGeometry(
     xTip,
     yTip,
     nTip,
-    rotationDegrees: (rotation * 180) / Math.PI,
     convergenceDegrees,
   };
 }
@@ -93,7 +91,6 @@ interface LabelMarkers {
   x: Marker | null;
   y: Marker | null;
   n: Marker | null;
-  angle: Marker | null;
 }
 
 /**
@@ -110,7 +107,6 @@ export function useAxesLayer(
     x: null,
     y: null,
     n: null,
-    angle: null,
   });
 
   useEffect(() => {
@@ -131,8 +127,7 @@ export function useAxesLayer(
       ref.current.x?.remove();
       ref.current.y?.remove();
       ref.current.n?.remove();
-      ref.current.angle?.remove();
-      ref.current = { x: null, y: null, n: null, angle: null };
+      ref.current = { x: null, y: null, n: null };
     };
   }, []);
 }
@@ -217,8 +212,7 @@ function syncLabels(
     markersRef.current.x?.remove();
     markersRef.current.y?.remove();
     markersRef.current.n?.remove();
-    markersRef.current.angle?.remove();
-    markersRef.current = { x: null, y: null, n: null, angle: null };
+    markersRef.current = { x: null, y: null, n: null };
     return;
   }
 
@@ -236,9 +230,10 @@ function syncLabels(
     IFC_Y_AXIS_COLOR,
     geometry.yTip,
   );
-  // The blue N arrow points to grid north, which diverges from map up by the
-  // grid convergence. Label that divergence right on the arrow so it doesn't
-  // read as a bug, and explain the full relationship on hover.
+  // The blue arrow points to grid north, which diverges from map up by the
+  // grid convergence. Spell out "Grid North" so the arrow not pointing
+  // straight up doesn't read as a bug, and annotate the divergence (with the
+  // full explanation on hover) when it's large enough to notice.
   const convergence = geometry.convergenceDegrees;
   const hasConvergence = Math.abs(convergence) >= 0.05;
   const convergenceText = hasConvergence
@@ -247,29 +242,13 @@ function syncLabels(
   markersRef.current.n = upsertLabel(
     map,
     markersRef.current.n,
-    hasConvergence ? `N ${convergenceText}` : "N",
+    hasConvergence ? `Grid North ${convergenceText}` : "Grid North",
     NORTH_AXIS_COLOR,
     geometry.nTip,
     {
       title: hasConvergence
         ? `Grid north — ${convergenceText} from map up (grid convergence).`
         : "Grid north (aligned with map up here).",
-    },
-  );
-  markersRef.current.angle = upsertLabel(
-    map,
-    markersRef.current.angle,
-    `${geometry.rotationDegrees.toFixed(2)}°`,
-    "#1f2937",
-    geometry.origin,
-    {
-      offsetY: 18,
-      title:
-        `Model rotation ${geometry.rotationDegrees.toFixed(2)}° clockwise from grid north.` +
-        (hasConvergence
-          ? ` Grid north itself is ${convergenceText} of map up (grid convergence), ` +
-            `so the blue N arrow won't point straight up.`
-          : ""),
     },
   );
 }
