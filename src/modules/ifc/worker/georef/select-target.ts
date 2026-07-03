@@ -14,7 +14,7 @@ import type { IfcSchema } from "../schema";
  * introduced rotation/scale so we're upgrading the entity type".
  */
 export type WriteTarget =
-  | { entity: "ePset_MapConversion"; note: "" }
+  | { entity: "ePSet_MapConversion"; note: "" }
   | { entity: "IfcMapConversionScaled"; note: "anisotropic scale" }
   | { entity: "IfcRigidOperation"; note: "translation-only" }
   | { entity: "IfcMapConversion"; note: string; upgradeFromRigid: boolean };
@@ -40,7 +40,7 @@ export function selectWriteTarget({
   fileHadRigidOperation,
 }: WriteTargetInputs): WriteTarget {
   if (schema === "IFC2X3") {
-    return { entity: "ePset_MapConversion", note: "" };
+    return { entity: "ePSet_MapConversion", note: "" };
   }
 
   // IFC 4.3 IfcMapConversionScaled is the only entity that can carry

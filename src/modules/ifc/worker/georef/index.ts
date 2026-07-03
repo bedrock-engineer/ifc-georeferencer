@@ -95,7 +95,7 @@ export async function writeMapConversion(
   // convert canonical-metres E/N/H to MapUnit at the boundary; see
   // `writeGeorefIfc4` for the formula.
   switch (target.entity) {
-    case "ePset_MapConversion": {
+    case "ePSet_MapConversion": {
       writeGeorefIfc2x3(
         ifcAPI,
         modelID,
@@ -169,7 +169,7 @@ function formatWriteOutcome(
         : "";
       return `${head}, ${body}${suffix})`;
     }
-    case "ePset_MapConversion": {
+    case "ePSet_MapConversion": {
       return `${head}, scale=${parameters.xScale.toFixed(6)}, rot=${parameters.rotation.toFixed(4)} rad)`;
     }
   }
