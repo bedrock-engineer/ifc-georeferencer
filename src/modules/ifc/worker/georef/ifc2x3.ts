@@ -22,6 +22,7 @@ import {
   buildHelmertFromFields,
   expressIDOf,
   findPrimarySiteId,
+  findProjectId,
   rawValue,
   rotationToAxisPair,
 } from "../shared";
@@ -33,13 +34,18 @@ import {
 } from "./shared";
 
 /**
- * IFC2X3 has no native IfcMapConversion. The community convention is
- * two property sets on IfcSite: ePset_MapConversion holds the 7
- * transform fields, ePset_ProjectedCRS holds the target CRS name. Accept
- * both `ePset_` and `ePSet_` casings — files in the wild use both.
+ * IFC2X3 has no native IfcMapConversion. The bSI Geo-referencing User
+ * Guide v2.0 backports IFC4 as two property sets on IfcProject:
+ * ePSet_MapConversion holds the 7 transform fields, ePSet_ProjectedCRS
+ * holds the target CRS name. The guide's casing is `ePSet_`, which is
+ * what the writer emits; files in the wild also use `ePset_`, so the
+ * reader matches pset names case-insensitively.
+ * Older tools, like IfcGref and earlier versions of
+ * this tool, attached the psets to IfcSite instead; read both hosts,
+ * preferring IfcProject when a pset exists on each.
  *
  * Implementation note: we read every rel with `flatten=false` so references
- * stay as cheap Handle objects. Only when RelatedObjects contains the site
+ * stay as cheap Handle objects. Only when RelatedObjects contains a host
  * do we fetch the pset by ID, and only on a name match do we read its
  * properties. Old code used `flatten=true` and recursively materialised
  * every rel's entire subtree — a factor-of-hundreds multiplier vs. the
@@ -50,21 +56,38 @@ export function readGeorefIfc2x3(
   modelID: number,
   ifcMetresPerUnit: number,
 ): GeorefRead {
+  const projectID = findProjectId(ifcAPI, modelID);
   const siteID = findPrimarySiteId(ifcAPI, modelID);
-  if (siteID == null) {
+  const hostIDs = [projectID, siteID].filter((id) => id != null);
+  if (hostIDs.length === 0) {
     return absentGeorefRead(null);
   }
 
   let mapConvID: number | null = null;
+  let mapConvOnProject = false;
   let projectedCrsID: number | null = null;
+  let projectedCrsOnProject = false;
 
-  for (const { psetID, name } of iterateSitePsets(ifcAPI, modelID, siteID)) {
-    if (name === "epset_mapconversion") {
+  for (const { psetID, name, hostID } of iterateHostPsets(
+    ifcAPI,
+    modelID,
+    hostIDs,
+  )) {
+    const onProject = hostID === projectID;
+    if (
+      name === "epset_mapconversion" &&
+      (mapConvID == null || (onProject && !mapConvOnProject))
+    ) {
       mapConvID = psetID;
-    } else if (name === "epset_projectedcrs") {
+      mapConvOnProject = onProject;
+    } else if (
+      name === "epset_projectedcrs" &&
+      (projectedCrsID == null || (onProject && !projectedCrsOnProject))
+    ) {
       projectedCrsID = psetID;
+      projectedCrsOnProject = onProject;
     }
-    if (mapConvID != null && projectedCrsID != null) {
+    if (mapConvOnProject && projectedCrsOnProject) {
       break;
     }
   }
@@ -84,8 +107,8 @@ export function readGeorefIfc2x3(
   }
 
   const mcProperties = readPsetProperties(ifcAPI, modelID, mapConvID);
-  // ePset_ProjectedCRS has no Name property in some files; fall back to the
-  // ePset_MapConversion's TargetCRS so we still surface a hint.
+  // ePSet_ProjectedCRS has no Name property in some files; fall back to the
+  // ePSet_MapConversion's TargetCRS so we still surface a hint.
   if (rawProjectedCrs && rawProjectedCrs.name == null) {
     rawProjectedCrs.name = optionalPropertyString(mcProperties.TargetCRS);
   }
@@ -95,7 +118,7 @@ export function readGeorefIfc2x3(
   const onDiskE = optionalPropertyNumber(mcProperties.Eastings, 0);
   const onDiskN = optionalPropertyNumber(mcProperties.Northings, 0);
   const onDiskH = optionalPropertyNumber(mcProperties.OrthogonalHeight, 0);
-  // ePset_MapConversion has no MapUnit concept; values are conventionally
+  // ePSet_MapConversion has no MapUnit concept; values are conventionally
   // in the IFC project's length unit. Pass `ifcMetresPerUnit` for both
   // factors so the scale ratio is 1 (on-disk Scale == internal scale).
   const helmert = buildHelmertFromFields(
@@ -113,11 +136,11 @@ export function readGeorefIfc2x3(
     },
   );
 
-  // If the file had only ePset_MapConversion (no ePset_ProjectedCRS), we
+  // If the file had only ePSet_MapConversion (no ePSet_ProjectedCRS), we
   // still need a non-null rawProjectedCrs so `classifyGeorefRead` can
   // surface the targetCrsName hint from MC.TargetCRS.
   const projectedCrs = rawProjectedCrs ?? {
-    entityName: "ePset_ProjectedCRS",
+    entityName: "ePSet_ProjectedCRS",
     name: optionalPropertyString(mcProperties.TargetCRS),
     description: null,
     geodeticDatum: null,
@@ -129,7 +152,7 @@ export function readGeorefIfc2x3(
     // pset's MapUnit property is missing/blank, and the IFC2X3 reader
     // falls back to project units (not METRE — see source-card label).
     mapUnitStatus: "absent" as const,
-    // ePset_MapConversion E/N/H are in project units, so the factor used
+    // ePSet_MapConversion E/N/H are in project units, so the factor used
     // to reach canonical metres is the project's (Scale round-trips at 1).
     metresPerUnit: ifcMetresPerUnit,
   };
@@ -138,7 +161,7 @@ export function readGeorefIfc2x3(
     helmert,
     rawProjectedCrs: projectedCrs,
     rawMapConversion: {
-      entityName: "ePset_MapConversion",
+      entityName: "ePSet_MapConversion",
       eastings: onDiskE,
       northings: onDiskN,
       orthogonalHeight: onDiskH,
@@ -148,8 +171,8 @@ export function readGeorefIfc2x3(
       factorX: null,
       factorY: null,
       factorZ: null,
-      // ePset_MapConversion has no SourceCRS attribute — it's a free-form
-      // property set on IfcSite, not the IfcCoordinateOperation entity.
+      // ePSet_MapConversion has no SourceCRS attribute — it's a free-form
+      // property set on IfcProject, not the IfcCoordinateOperation entity.
       sourceCrs: null,
     },
   });
@@ -159,11 +182,11 @@ function readRawProjectedCrsIfc2x3(
   crsProperties: Record<string, unknown>,
   ifcMetresPerUnit: number,
 ): RawProjectedCrs {
-  // ePset_ProjectedCRS mirrors the IFC4 IfcProjectedCRS attributes as
+  // ePSet_ProjectedCRS mirrors the IFC4 IfcProjectedCRS attributes as
   // free-form properties; readers in the wild may write any subset.
   const mapUnit = optionalPropertyString(crsProperties.MapUnit);
   return {
-    entityName: "ePset_ProjectedCRS",
+    entityName: "ePSet_ProjectedCRS",
     name: optionalPropertyString(crsProperties.Name),
     description: optionalPropertyString(crsProperties.Description),
     geodeticDatum: optionalPropertyString(crsProperties.GeodeticDatum),
@@ -201,13 +224,19 @@ function optionalPropertyNumber(v: unknown, fallback: number): number {
  * directly via web-ifc because there is no equivalent high-level API.
  *
  * `parameters` are codebase-canonical (metres + dimensionless scale).
- * ePset_MapConversion has no MapUnit concept; values are conventionally in
+ * ePSet_MapConversion has no MapUnit concept; values are conventionally in
  * the IFC project's length unit. We divide `Eastings/Northings/
  * OrthogonalHeight` by `ifcMetresPerUnit` at this boundary, symmetric with
  * the read path (where `buildHelmertFromFields` is called with
  * `mapUnitMetresPerUnit: ifcMetresPerUnit`). `Scale` is dimensionless and
  * round-trips unchanged for IFC2X3 (the source-unit / MapUnit ratio is 1
  * when both sides are the project length unit).
+ *
+ * The psets attach to IfcProject, per the bSI Geo-referencing User Guide
+ * v2.0 ("for the IFC2x3 implementation the ePSets are linked to
+ * ifcProject as the geo-referencing specification applies to the entire
+ * project"). Any pre-existing psets on IfcSite (the older convention)
+ * are removed so the file doesn't carry two competing georefs.
  */
 export function writeGeorefIfc2x3(
   ifcAPI: IfcAPI,
@@ -217,18 +246,18 @@ export function writeGeorefIfc2x3(
   parameters: HelmertParams,
   ifcMetresPerUnit: number,
 ): void {
-  const siteID = findPrimarySiteId(ifcAPI, modelID);
-  if (siteID == null) {
-    const message = "No IfcSite found in IFC2X3 model";
+  const projectID = findProjectId(ifcAPI, modelID);
+  if (projectID == null) {
+    const message = "No IfcProject found in IFC2X3 model";
     emitLog({ level: "error", source: "worker", message });
     throw new Error(message);
   }
 
-  removeExistingGeorefIfc2x3(ifcAPI, modelID, siteID);
+  removeExistingGeorefIfc2x3(ifcAPI, modelID, projectID);
 
-  // Reuse the site's OwnerHistory; don't fabricate a new one.
-  const siteRaw = ifcAPI.GetLine(modelID, siteID, false);
-  const ownerHistoryHandle = siteRaw.OwnerHistory;
+  // Reuse the project's OwnerHistory; don't fabricate a new one.
+  const projectRaw = ifcAPI.GetLine(modelID, projectID, false);
+  const ownerHistoryHandle = projectRaw.OwnerHistory;
 
   const crsName = `EPSG:${epsgCode}`;
   const { xAxisAbscissa, xAxisOrdinate } = rotationToAxisPair(
@@ -246,16 +275,22 @@ export function writeGeorefIfc2x3(
   const projectedCrsPset = buildPset(
     ifcAPI,
     modelID,
-    "ePset_ProjectedCRS",
+    "ePSet_ProjectedCRS",
     ownerHistoryHandle,
     projectedCrsProperties,
   );
-  writePsetRel(ifcAPI, modelID, ownerHistoryHandle, siteID, projectedCrsPset);
+  writePsetRel(
+    ifcAPI,
+    modelID,
+    ownerHistoryHandle,
+    projectID,
+    projectedCrsPset,
+  );
 
   const mapConvPset = buildPset(
     ifcAPI,
     modelID,
-    "ePset_MapConversion",
+    "ePSet_MapConversion",
     ownerHistoryHandle,
     [
       property(ifcAPI, modelID, "TargetCRS", IFCLABEL, crsName),
@@ -285,26 +320,35 @@ export function writeGeorefIfc2x3(
       property(ifcAPI, modelID, "Scale", IFCREAL, parameters.xScale),
     ],
   );
-  writePsetRel(ifcAPI, modelID, ownerHistoryHandle, siteID, mapConvPset);
+  writePsetRel(ifcAPI, modelID, ownerHistoryHandle, projectID, mapConvPset);
 }
 
 /**
- * Iterate every IfcRelDefinesByProperties whose RelatedObjects includes the
- * site, yielding the rel ID, pset ID, and lowercased pset name. Shared by
- * the ePSet read path and the ePSet remove path — both need the same
- * cheap-lookup-first traversal.
+ * Iterate every IfcRelDefinesByProperties whose RelatedObjects includes one
+ * of the hosts, yielding the rel ID, pset ID, lowercased pset name, and the
+ * matched host ID. Shared by the ePSet read path and the ePSet remove path —
+ * both need the same cheap-lookup-first traversal.
  */
-function* iterateSitePsets(
+function* iterateHostPsets(
   ifcAPI: IfcAPI,
   modelID: number,
-  siteID: number,
-): Generator<{ relID: number; psetID: number; name: string; pset: any }> {
+  hostIDs: ReadonlyArray<number>,
+): Generator<{
+  relID: number;
+  psetID: number;
+  name: string;
+  pset: any;
+  hostID: number;
+}> {
   const relIds = ifcAPI.GetLineIDsWithType(modelID, IFCRELDEFINESBYPROPERTIES);
   for (let index = 0; index < relIds.size(); index++) {
     const relID = relIds.get(index);
     const rel = ifcAPI.GetLine(modelID, relID, false);
     const related = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [];
-    if (!related.some((o: any) => expressIDOf(o) === siteID)) {
+    const hostID = hostIDs.find((id) =>
+      related.some((o: any) => expressIDOf(o) === id),
+    );
+    if (hostID == null) {
       continue;
     }
     const psetID = expressIDOf(rel.RelatingPropertyDefinition);
@@ -313,7 +357,7 @@ function* iterateSitePsets(
     }
     const pset = ifcAPI.GetLine(modelID, psetID, false);
     const name = String(rawValue(pset?.Name) ?? "").toLowerCase();
-    yield { relID, psetID, name, pset };
+    yield { relID, psetID, name, pset, hostID };
   }
 }
 
@@ -349,21 +393,25 @@ function readPsetProperties(
 }
 
 /**
- * Delete existing ePset_MapConversion / ePset_ProjectedCRS property sets
+ * Delete existing ePSet_MapConversion / ePSet_ProjectedCRS property sets
  * and their IfcRelDefinesByProperties from an IFC2X3 model so a subsequent
- * write doesn't create duplicates.
+ * write doesn't create duplicates. Sweeps both IfcProject (where we write)
+ * and IfcSite (the older convention this tool and others used), so a
+ * rewrite migrates legacy site-attached psets to the project.
  *
  * Deletes the rel, the pset, and every IfcPropertySingleValue inside it.
  */
 function removeExistingGeorefIfc2x3(
   ifcAPI: IfcAPI,
   modelID: number,
-  siteID: number,
+  projectID: number,
 ): void {
-  for (const { relID, psetID, name, pset } of iterateSitePsets(
+  const siteID = findPrimarySiteId(ifcAPI, modelID);
+  const hostIDs = siteID == null ? [projectID] : [projectID, siteID];
+  for (const { relID, psetID, name, pset } of iterateHostPsets(
     ifcAPI,
     modelID,
-    siteID,
+    hostIDs,
   )) {
     if (name !== "epset_mapconversion" && name !== "epset_projectedcrs") {
       continue;
@@ -421,7 +469,7 @@ function writePsetRel(
   ifcAPI: IfcAPI,
   modelID: number,
   ownerHistory: any,
-  siteID: number,
+  hostID: number,
   pset: any,
 ): void {
   const rel = ifcAPI.CreateIfcEntity(
@@ -431,7 +479,7 @@ function writePsetRel(
     ownerHistory,
     null,
     null,
-    [new Handle(siteID)],
+    [new Handle(hostID)],
     pset,
   );
   ifcAPI.WriteLine(modelID, rel);

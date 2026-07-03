@@ -32,7 +32,7 @@ export interface MapOverlaySignals {
   /**
    * Entity name to render next to the coordinate-operation marker glyph.
    * Tracks the active driver: "IfcMapConversion" / "IfcRigidOperation"
-   * (or "ePset_MapConversion" on IFC2x3). Empty/unused when
+   * (or "ePSet_MapConversion" on IFC2x3). Empty/unused when
    * `mapConversion` is null.
    */
   coordinateOperationLabel: string;

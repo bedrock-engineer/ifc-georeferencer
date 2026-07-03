@@ -87,7 +87,7 @@ export function MapConversionSection({
 
   // FactorX/Y/Z rows are rendered exactly when the source entity is IFC
   // 4.3's IfcMapConversionScaled subtype; null on plain IfcMapConversion
-  // or ePset_MapConversion.
+  // or ePSet_MapConversion.
   const isScaled = raw.factorX != null;
 
   return (
@@ -112,7 +112,7 @@ export function MapConversionSection({
       <DisclosurePanel>
         <dl className="mt-2 space-y-1 border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
           {/* SourceCRS row: which IfcGeometricRepresentationContext the
-              MapConversion attaches to. Hidden on ePset_MapConversion
+              MapConversion attaches to. Hidden on ePSet_MapConversion
               (no SourceCRS attribute). Composite value — keeps the
               context identifier/type visible without padding three
               extra rows for a usually-uninteresting "Model · Model" pair. */}

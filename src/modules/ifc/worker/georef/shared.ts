@@ -8,14 +8,14 @@ export interface ExistingGeoref {
 }
 
 /**
- * Verbatim-from-file IfcProjectedCRS attributes (IFC4) or ePset_ProjectedCRS
+ * Verbatim-from-file IfcProjectedCRS attributes (IFC4) or ePSet_ProjectedCRS
  * properties (IFC2X3). All seven fields are surfaced even when null so the
  * source-side UI can render "Not present" rows uniformly.
  */
 export interface RawProjectedCrs {
   /**
    * Name of the actual entity these fields came from — `"IfcProjectedCRS"`
-   * on IFC4+ and `"ePset_ProjectedCRS"` on IFC2x3. Single source of truth
+   * on IFC4+ and `"ePSet_ProjectedCRS"` on IFC2x3. Single source of truth
    * for the source-side UI's heading; the UI does not re-derive from
    * schema.
    */
@@ -28,7 +28,7 @@ export interface RawProjectedCrs {
   mapZone: string | null;
   /**
    * Combined IfcSIUnit `Prefix + Name` (e.g. "METRE", "MILLIMETRE") or the
-   * raw string from ePset_ProjectedCRS. Null when MapUnit is unset OR
+   * raw string from ePSet_ProjectedCRS. Null when MapUnit is unset OR
    * present-but-malformed (`Name=$`) — the badge in the source-card
    * disambiguates via `mapUnitStatus`.
    */
@@ -90,7 +90,7 @@ export interface RawMapConversion {
   /**
    * Name of the actual entity these fields came from —
    * `"IfcMapConversion"` (IFC4+ plain), `"IfcMapConversionScaled"` (IFC4.3
-   * subtype with FactorX/Y/Z), or `"ePset_MapConversion"` (IFC2x3 convention).
+   * subtype with FactorX/Y/Z), or `"ePSet_MapConversion"` (IFC2x3 convention).
    *  Single source of truth for the source-side UI's heading.
    */
   entityName: string;
@@ -114,7 +114,7 @@ export interface RawMapConversion {
    * `IfcMapConversion.SourceCRS` points to. Useful when a file carries
    * multiple contexts (Model/Plan/Body) — the MapConversion is attached
    * to a specific one, and the link is otherwise invisible. Null on IFC2X3
-   * (ePset_MapConversion has no SourceCRS attribute).
+   * (ePSet_MapConversion has no SourceCRS attribute).
    */
   sourceCrs: RawSourceCrs | null;
 }
@@ -160,7 +160,7 @@ export interface GeorefRead {
   targetCrsHint: string | null;
   /**
    * Vertical datum identifier from IfcProjectedCRS.VerticalDatum (IFC4) or
-   * the `VerticalDatum` property on `ePset_ProjectedCRS` (IFC2X3). The
+   * the `VerticalDatum` property on `ePSet_ProjectedCRS` (IFC2X3). The
    * IFC 4.3 spec recommends EPSG-namespaced values (e.g. `EPSG:5181` for
    * DHHN92, `EPSG:5709` for NAP), but it's an IfcIdentifier so older files
    * may carry plain short labels like `NAP` or be unset entirely (the
@@ -170,9 +170,9 @@ export interface GeorefRead {
    * form) or type a custom label.
    */
   verticalDatumHint: string | null;
-  /** Verbatim-from-file IfcProjectedCRS / ePset_ProjectedCRS attributes. */
+  /** Verbatim-from-file IfcProjectedCRS / ePSet_ProjectedCRS attributes. */
   rawProjectedCrs: RawProjectedCrs | null;
-  /** Verbatim-from-file IfcMapConversion / ePset_MapConversion fields. */
+  /** Verbatim-from-file IfcMapConversion / ePSet_MapConversion fields. */
   rawMapConversion: RawMapConversion | null;
   mapConversionStatus: MapConversionStatus;
   /**
@@ -209,7 +209,7 @@ export interface SiteReferenceSync {
 
 /**
  * Vertical-datum hint surfaced to the UI. Null when the file's
- * IfcProjectedCRS / ePset_ProjectedCRS doesn't carry one (the common case
+ * IfcProjectedCRS / ePSet_ProjectedCRS doesn't carry one (the common case
  * — most BIM exporters skip the field) or the field is empty. Shared by
  * the IFC4 MC reader, the IFC4 RigidOp fallback reader, the IFC2X3 ePset
  * reader, and the absent-georef terminator, so the empty-string vs null
@@ -266,7 +266,7 @@ export function classifyGeorefRead(input: {
   };
 }
 
-/** Empty result for files with no IfcMapConversion / ePset_MapConversion. */
+/** Empty result for files with no IfcMapConversion / ePSet_MapConversion. */
 export function absentGeorefRead(
   rawProjectedCrs: RawProjectedCrs | null,
 ): GeorefRead {

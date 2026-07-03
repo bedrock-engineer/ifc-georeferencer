@@ -119,7 +119,7 @@ export function SourceCard({
 
   const mapConversionEntity =
     metadata.rawMapConversion?.entityName ??
-    (isEpsetSchema ? "ePset_MapConversion" : "IfcMapConversion");
+    (isEpsetSchema ? "ePSet_MapConversion" : "IfcMapConversion");
   // For the LoGeoRef caption: name the entity that's actually driving the
   // anchor, so a RigidOp-positioned file reads "IfcRigidOperation present,
   // file is georeferenced" rather than the misleading "IfcMapConversion …".
@@ -130,7 +130,7 @@ export function SourceCard({
 
   const projectedCrsEntity =
     metadata.rawProjectedCrs?.entityName ??
-    (isEpsetSchema ? "ePset_ProjectedCRS" : "IfcProjectedCRS");
+    (isEpsetSchema ? "ePSet_ProjectedCRS" : "IfcProjectedCRS");
 
   return (
     <Card title="Source" headerAside={<LevelBadge level={level} />}>
@@ -171,7 +171,7 @@ export function SourceCard({
           IFC2x3 has no native <code>IfcMapConversion</code> or{" "}
           <code>IfcProjectedCRS</code> entity. Georeferencing is encoded as
           property sets on <code>IfcSite</code> by convention (
-          <code>ePset_MapConversion</code>, <code>ePset_ProjectedCRS</code>) —
+          <code>ePSet_MapConversion</code>, <code>ePSet_ProjectedCRS</code>) —
           readable by tools that look for these psets, but not part of the IFC
           spec.
         </p>

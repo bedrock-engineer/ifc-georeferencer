@@ -138,7 +138,7 @@ export { mapConversionUnitFactor } from "#modules/units/convert";
 
 /**
  * Build HelmertParams from the six raw numeric fields read off either an
- * IfcMapConversion entity (IFC4+) or an ePset_MapConversion property bag
+ * IfcMapConversion entity (IFC4+) or an ePSet_MapConversion property bag
  * (IFC2X3). Callers pass already-unwrapped values; missing fields get the
  * identity defaults (scale=1, abscissa=1, rest=0).
  *
@@ -164,7 +164,7 @@ export function buildHelmertFromFields(
     orthogonalHeight?: unknown;
     /**
      * IFC 4.3 IfcMapConversionScaled per-axis factors. Default to 1 when
-     * absent (plain IfcMapConversion / ePset_MapConversion). Per spec,
+     * absent (plain IfcMapConversion / ePSet_MapConversion). Per spec,
      * effective per-axis scale is `scale × factor<axis>`.
      */
     factorX?: unknown;
@@ -331,6 +331,19 @@ export function rotationToAxisPair(rotation: number): {
     xAxisAbscissa: Math.cos(rotation),
     xAxisOrdinate: Math.sin(rotation),
   };
+}
+
+/**
+ * Express ID of the model's IfcProject, or null if the model has none
+ * (invalid per schema, but be defensive). IFC allows exactly one
+ * IfcProject per file, so the first hit is the project.
+ */
+export function findProjectId(
+  ifcAPI: IfcAPI,
+  modelID: number,
+): number | null {
+  const ids = ifcAPI.GetLineIDsWithType(modelID, IFCPROJECT);
+  return ids.size() === 0 ? null : ids.get(0);
 }
 
 /**

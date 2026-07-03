@@ -150,9 +150,9 @@ export interface IfcMetadata {
   targetCrsHint: string | null;
   /** See GeorefRead.verticalDatumHint. */
   verticalDatumHint: string | null;
-  /** Verbatim-from-file IfcProjectedCRS / ePset_ProjectedCRS attributes. */
+  /** Verbatim-from-file IfcProjectedCRS / ePSet_ProjectedCRS attributes. */
   rawProjectedCrs: RawProjectedCrs | null;
-  /** Verbatim-from-file IfcMapConversion / ePset_MapConversion fields. */
+  /** Verbatim-from-file IfcMapConversion / ePSet_MapConversion fields. */
   rawMapConversion: RawMapConversion | null;
   mapConversionStatus: MapConversionStatus;
   /** Verbatim-from-file IfcRigidOperation fields (IFC 4.3+ only). */

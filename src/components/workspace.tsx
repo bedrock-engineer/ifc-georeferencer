@@ -618,7 +618,7 @@ function deriveCoordinateOperationLabel(metadata: IfcMetadata): string {
   }
 
   return metadata.schema === "IFC2X3"
-    ? "ePset_MapConversion"
+    ? "ePSet_MapConversion"
     : "IfcMapConversion";
 }
 

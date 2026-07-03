@@ -147,7 +147,7 @@ function GuideContent() {
           <Code>IfcMapConversion</Code> + <Code>IfcProjectedCRS</Code> on
           IFC4, <Code>IfcMapConversionScaled</Code> (per-axis scale) or{" "}
           <Code>IfcRigidOperation</Code> (translation-only) on IFC 4.3, and
-          the <Code>ePset_MapConversion</Code> property set on IFC 2x3.
+          the <Code>ePSet_MapConversion</Code> property set on IFC 2x3.
         </p>
 
         <p>

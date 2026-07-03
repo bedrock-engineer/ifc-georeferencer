@@ -397,7 +397,7 @@ export function applyPickedAnchor(arguments_: {
  * RefElevation is deliberately excluded.
  */
 export interface PredictedWriteEntity {
-  /** "IfcRigidOperation" / "IfcMapConversion" / "IfcMapConversionScaled" / "ePset_MapConversion". */
+  /** "IfcRigidOperation" / "IfcMapConversion" / "IfcMapConversionScaled" / "ePSet_MapConversion". */
   entityName: string;
   /** Short qualifier shown next to the entity name, or empty when none. */
   note: string;
