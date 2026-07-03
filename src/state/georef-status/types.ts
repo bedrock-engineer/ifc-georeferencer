@@ -59,10 +59,11 @@ export interface SpaceOverlay {
  *     `app.tsx::handleFile` for baked-origin), not from a render-time
  *     effect.
  *   - CRS-scoped (`site-outside-crs`, `helmert-outside-crs`,
- *     `double-baked-origin`, `grid-degraded`) can transition when the
- *     user picks a different CRS. They flow through `GeorefView.findings`
- *     and are deduplicated by `${kind}:${crsCode}` so the log doesn't
- *     repeat per slider edit or CRS round-trip.
+ *     `double-baked-origin`, `grid-degraded`, `ifc-site-seed-available`)
+ *     can transition when the user picks a different CRS. They flow
+ *     through `GeorefView.findings` and are deduplicated by
+ *     `${kind}:${crsCode}` so the log doesn't repeat per slider edit or
+ *     CRS round-trip.
  */
 export type Finding =
   | { kind: "unknown-length-unit"; unit: string }
@@ -95,7 +96,31 @@ export type Finding =
       crsCode: number;
       areaOfUse: string | null;
     }
-  | { kind: "grid-degraded"; crsCode: number; reason: OverrideError };
+  | { kind: "grid-degraded"; crsCode: number; reason: OverrideError }
+  | {
+      /** The file has no map conversion but IfcSite
+       * RefLatitude/RefLongitude projects cleanly through the active
+       * CRS — a seed proposal is showing in the anchor card. That
+       * lat/lon is only as trustworthy as whoever set the project
+       * location in the authoring tool (Revit's untouched default is in
+       * Boston), so the seed is never applied without the user's
+       * say-so; this finding puts the offer on the log-panel record. */
+      kind: "ifc-site-seed-available";
+      proposal: SeedProposal;
+      crsCode: number;
+    };
+
+/**
+ * IfcSite-derived anchor seed offered — not applied — when the file has
+ * a RefLatitude/RefLongitude but no usable map conversion. The anchor
+ * card renders it as an inline "Use as anchor / Ignore" prompt;
+ * accepting dispatches `seedApplied` (anchor kind "derived").
+ */
+export interface SeedProposal {
+  site: LngLat;
+  /** Full Helmert (rotation from TrueNorth), canonical metres. */
+  params: HelmertParams;
+}
 
 /**
  * Stable identifier for a finding, used to dedupe log emissions.
@@ -112,7 +137,8 @@ export function findingKey(finding: Finding): string {
     case "site-outside-crs":
     case "helmert-outside-crs":
     case "double-baked-origin":
-    case "grid-degraded": {
+    case "grid-degraded":
+    case "ifc-site-seed-available": {
       return `${finding.kind}:${finding.crsCode}`;
     }
   }
@@ -149,6 +175,14 @@ export function findingKey(finding: Finding): string {
 export interface GeorefView {
   editableParameters: HelmertParams | null;
   effectiveParameters: HelmertParams | null;
+  /**
+   * Set when the file's IfcSite lat/lon could seed the anchor but no
+   * anchor exists yet. Never feeds `editableParameters` /
+   * `effectiveParameters` directly — the user accepts or ignores it in
+   * the anchor card (bogus site refs are common; Revit's untouched
+   * default project location is in Boston).
+   */
+  seedProposal: SeedProposal | null;
   provenance: Provenance;
   references: MapReferences;
   bakedProjectedOrigin: XYZ | null;

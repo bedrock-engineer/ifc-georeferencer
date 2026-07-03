@@ -73,6 +73,7 @@ export function getIfc(): IfcFacade {
       verticalDatum,
       parameters,
       siteReference,
+      crsMetresPerUnit,
     ) {
       await api.writeMapConversion(
         requireModel(),
@@ -80,6 +81,7 @@ export function getIfc(): IfcFacade {
         verticalDatum,
         parameters,
         siteReference,
+        crsMetresPerUnit,
       );
     },
     async zeroSitePlacementLocation() {

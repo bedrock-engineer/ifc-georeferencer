@@ -72,6 +72,17 @@ export function findingToLogMessage(finding: Finding): string {
         `coordinates may be off by ~170 m. Retry from the CRS card.`
       );
     }
+    case "ifc-site-seed-available": {
+      const { latitude, longitude } = finding.proposal.site;
+      const { easting, northing } = finding.proposal.params;
+      return (
+        `No map conversion in file — IfcSite RefLatitude/RefLongitude ` +
+        `(${latitude.toFixed(6)}, ${longitude.toFixed(6)}) can seed the anchor: ` +
+        `E ${easting.toFixed(2)}, N ${northing.toFixed(2)} in ` +
+        `EPSG:${finding.crsCode}. Review it in the Reference point card — ` +
+        `authoring tools often export a placeholder site reference.`
+      );
+    }
   }
 }
 

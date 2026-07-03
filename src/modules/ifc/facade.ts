@@ -40,12 +40,20 @@ export interface IfcFacade {
    * mechanisms in sync per the Geonovum/bSI AU guidance. `verticalDatum`
    * is written into IfcProjectedCRS.VerticalDatum (or the equivalent
    * ePset property in IFC2X3); pass null to leave it unset.
+   *
+   * `crsMetresPerUnit` is the target CRS's axis-unit factor
+   * (`CrsDef.metresPerUnit`) — resolved on the main thread because the
+   * worker has no proj4. The IFC2X3 writer needs it to express Eastings/
+   * Northings/OrthogonalHeight in CRS axis units (the ePsets have no
+   * MapUnit mechanism to self-describe any other unit); IFC4+ writers
+   * ignore it (they use the file's own IfcProjectedCRS.MapUnit).
    */
   writeMapConversion(
     epsgCode: number,
     verticalDatum: string | null,
     parameters: HelmertParams,
     siteReference: SiteReferenceSync | null,
+    crsMetresPerUnit: number,
   ): Promise<void>;
   /**
    * Overwrite `IfcSite.ObjectPlacement.RelativePlacement.Location.

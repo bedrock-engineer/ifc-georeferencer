@@ -147,9 +147,9 @@ export { mapConversionUnitFactor } from "#modules/units/convert";
  * 1. **Translation fields** (`Eastings`, `Northings`, `OrthogonalHeight`)
  *    — IFC 4.x stores these in `IfcProjectedCRS.MapUnit`, *not* the IFC
  *    project's length unit. We multiply by `mapUnitMetresPerUnit` to land
- *    in canonical metres. (IFC2X3 ePset has no MapUnit concept; the
- *    convention there is project units, so callers pass
- *    `mapUnitMetresPerUnit = ifcMetresPerUnit`.)
+ *    in canonical metres. (IFC2X3 ePset has no MapUnit entity; the IFC2X3
+ *    reader resolves the unit per `resolveEpsetLengthUnit` — MapUnit pset
+ *    property or Scale inversion — and passes the result here.)
  *
  * 2. **`Scale`** — strip the on-disk source-unit/MapUnit ratio via
  *    `mapConversionUnitFactor` (see above) to land in dimensionless canonical.
@@ -338,10 +338,7 @@ export function rotationToAxisPair(rotation: number): {
  * (invalid per schema, but be defensive). IFC allows exactly one
  * IfcProject per file, so the first hit is the project.
  */
-export function findProjectId(
-  ifcAPI: IfcAPI,
-  modelID: number,
-): number | null {
+export function findProjectId(ifcAPI: IfcAPI, modelID: number): number | null {
   const ids = ifcAPI.GetLineIDsWithType(modelID, IFCPROJECT);
   return ids.size() === 0 ? null : ids.get(0);
 }

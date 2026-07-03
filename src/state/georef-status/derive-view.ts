@@ -7,13 +7,12 @@ import {
 import type { IfcMetadata } from "#modules/ifc/worker";
 import {
   anchorParams,
-  anchorProvenance,
   projectIfcSite,
   trueNorthRotation,
   type Anchor,
 } from "#state/workspace";
 import { deriveMapReferences } from "./references";
-import type { Finding, GeorefView } from "./types";
+import type { Finding, GeorefView, SeedProposal } from "./types";
 
 /** ~10 km. Sites larger than this on a side are unusual; UTM/RD/state-plane
  *  coords are typically 100k–10M, so a "local origin" of that magnitude is
@@ -91,14 +90,17 @@ function detectDoubleBakedOrigin(arguments_: {
 /**
  * Files with IfcSite RefLat/RefLon but no IfcMapConversion carry enough
  * info to place the model. Project lat/lon through the active CRS (scale
- * 1, rotation = TrueNorth) to get a seed Helmert.
+ * 1, rotation = TrueNorth) and package the result with its source
+ * lat/lon as a `SeedProposal`. The caller gates on usability (site
+ * inside the CRS bbox, Helmert projects cleanly) before offering it.
  */
-function deriveSeededParameters(
+function deriveSeedProposal(
   metadata: IfcMetadata,
   activeCrs: CrsDef,
-): HelmertParams | null {
+): SeedProposal | null {
+  const site = metadata.siteReference;
   const projected = projectIfcSite(metadata, activeCrs);
-  if (projected === null || projected.isErr()) {
+  if (!site || projected === null || projected.isErr()) {
     return null;
   }
 
@@ -106,10 +108,15 @@ function deriveSeededParameters(
   // of the IFC project's spatial root (local (0,0,0)) — keep the literal
   // `local` here to make the assumption explicit, since `localOrigin` may
   // be non-zero on this metadata. Algebra lives in `solveSinglePointFallback`.
-  return solveSinglePointFallback(
+  const params = solveSinglePointFallback(
     { local: { x: 0, y: 0, z: 0 }, target: projected.value },
     { trueNorthRotation: trueNorthRotation(metadata.trueNorth) },
   );
+
+  return {
+    site: { latitude: site.latitude, longitude: site.longitude },
+    params,
+  };
 }
 
 /**
@@ -166,12 +173,9 @@ export function deriveGeorefView(arguments_: {
 }): GeorefView {
   const { metadata, activeCrs, anchor } = arguments_;
 
-  // Anchor params override the IfcSite seed; only fall back to the seed
-  // when there's no anchor. The seed needs an active CRS to project; the
-  // anchor doesn't.
-  const rawParameters =
-    anchorParams(anchor) ??
-    (activeCrs ? deriveSeededParameters(metadata, activeCrs) : null);
+  // Parameters come from the anchor alone — the IfcSite seed is offered
+  // separately (see `seedProposal` below), never auto-applied.
+  const rawParameters = anchorParams(anchor);
 
   const effectiveParameters = computeEffectiveParameters({
     rawParameters,
@@ -179,13 +183,32 @@ export function deriveGeorefView(arguments_: {
     localOrigin: metadata.localOrigin,
   });
 
-  const provenance = anchorProvenance(anchor, effectiveParameters !== null);
+  const provenance = anchor.kind;
 
   const references = deriveMapReferences(
     metadata,
     effectiveParameters,
     activeCrs,
   );
+
+  // The IfcSite seed is never auto-applied: bogus RefLat/RefLon values
+  // are common in the wild (Revit's untouched default is in Boston), so
+  // it's offered as a proposal the anchor card renders, and only an
+  // explicit accept turns it into an anchor. Offered only when there's
+  // no anchor yet and the seed is actually usable: site ref inside the
+  // CRS's area of use AND the seeded Helmert projects cleanly. Outside
+  // either gate, `site-outside-crs` / the solver path tell the story.
+  const proposed =
+    rawParameters === null && activeCrs
+      ? deriveSeedProposal(metadata, activeCrs)
+      : null;
+  const seedProposal =
+    proposed &&
+    activeCrs &&
+    !references.siteOutsideBbox &&
+    helmertProjectsInsideCrs(proposed.params, activeCrs, metadata.localOrigin)
+      ? proposed
+      : null;
 
   const bakedProjectedOrigin = detectBakedProjectedOrigin(metadata);
   const doubleBakedOrigin = activeCrs
@@ -195,6 +218,14 @@ export function deriveGeorefView(arguments_: {
   const findings: Array<Finding> = [];
 
   if (activeCrs) {
+    if (seedProposal) {
+      findings.push({
+        kind: "ifc-site-seed-available",
+        proposal: seedProposal,
+        crsCode: activeCrs.code,
+      });
+    }
+
     if (activeCrs.accuracy.kind === "degraded-override-failed") {
       findings.push({
         kind: "grid-degraded",
@@ -247,6 +278,7 @@ export function deriveGeorefView(arguments_: {
   return {
     editableParameters: rawParameters,
     effectiveParameters,
+    seedProposal,
     provenance,
     references,
     bakedProjectedOrigin,

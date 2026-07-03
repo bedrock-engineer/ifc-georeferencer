@@ -36,6 +36,9 @@ export async function writeMapConversionToWorker(arguments_: {
     datumToWrite,
     parameters,
     siteReference,
+    // The IFC2X3 ePset writer expresses E/N/H in the CRS's axis unit;
+    // resolved here because the worker has no proj4.
+    activeCrs.metresPerUnit,
   );
 }
 

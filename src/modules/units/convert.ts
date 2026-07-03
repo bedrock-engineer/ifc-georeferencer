@@ -140,6 +140,60 @@ export function unitToMetres(name: string): Result<number, UnitError> {
 }
 
 /**
+ * Snap a derived metres-per-unit factor to the nearest entry in
+ * {@link LENGTH_UNITS}, or null when nothing is within tolerance.
+ *
+ * Used by the IFC2X3 ePset reader to disambiguate the two Eastings/
+ * Northings unit conventions found in the wild by inverting the on-disk
+ * Scale (`derived = ifcMetresPerUnit / onDiskScale`). The inversion
+ * assumes the geometric ground-to-grid scale is ≈ 1, so `derived` lands
+ * *near* a real unit factor but rarely exactly on it — e.g. an mm file
+ * with a solved Helmert scale of 1.0002 yields 0.0009998, and using that
+ * raw would shift Eastings by ~37 m at RD coordinates. Snapping recovers
+ * the exact unit (real unit ratios are discrete) and thereby the exact
+ * geometric scale.
+ *
+ * Tolerance is 5% in log-space: wide enough for any plausible geometric
+ * scale contamination (ground-to-grid factors deviate from 1 by ~1e-4),
+ * narrow enough that no two table entries are conflated — the closest
+ * pair with distinct factors (yard at 0.9144 vs metre) is ~9% apart.
+ * (Foot vs US survey foot differ by 2 ppm — below what a scale-
+ * contaminated quotient can resolve, so whichever is nearer wins; the
+ * same aliasing `nameToMetresPerUnit` accepts.)
+ */
+export function snapToKnownUnitFactor(derived: number): number | null {
+  if (!Number.isFinite(derived) || derived <= 0) {
+    return null;
+  }
+  let best: { metres: number; distance: number } | null = null;
+  for (const unit of LENGTH_UNITS) {
+    const distance = Math.abs(Math.log(derived / unit.metres));
+    if (best === null || distance < best.distance) {
+      best = { metres: unit.metres, distance };
+    }
+  }
+  if (best === null || best.distance > Math.log(1.05)) {
+    return null;
+  }
+  return best.metres;
+}
+
+/**
+ * IFC unit name for an exact metres-per-unit factor ("METRE",
+ * "MILLIMETRE", "FOOT", …), or null for unrecognised ratios. Used by the
+ * IFC2X3 ePset writer to spell the MapUnit property from a CRS's
+ * metresPerUnit. Exact match (the factor comes from our own tables or
+ * proj4's, both discrete), not a snap.
+ */
+export function lengthUnitNameForMetres(metresPerUnit: number): string | null {
+  const match = LENGTH_UNITS.find(
+    (unit) => Math.abs(unit.metres - metresPerUnit) < 1e-12,
+  );
+  // Index 0 is the canonical SI spelling ("METRE", not "METER").
+  return match?.names[0] ?? null;
+}
+
+/**
  * The `IfcMapConversion.Scale` unit-conversion ratio: source-unit (IFC
  * project length unit) ↔ MapUnit. Codebase canonical is dimensionless
  * geometric scale (metres in, metres out — see `modules/helmert/solve.ts`),
@@ -153,8 +207,8 @@ export function unitToMetres(name: string): Result<number, UnitError> {
  *   - mm IFC + METRE map: ratio = 0.001 (an identity transform writes 0.001)
  *   - metric IFC + METRE map: ratio = 1 (identity writes 1)
  *   - metric IFC + FOOT map: ratio = 1/0.3048 ≈ 3.28
- *   - IFC2X3 ePset (no MapUnit, callers pass map = ifc): ratio = 1, Scale
- *     round-trips unchanged
+ *   - IFC2X3 ePset: same formula with the target CRS's axis unit standing
+ *     in for MapUnit (mm IFC + metre CRS writes 0.001, like IfcGref)
  *
  * Skipping this conversion shrinks the rendered model by 1000× for an mm
  * project + METRE MapUnit — the 3D layer disappears and the footprint

@@ -39,12 +39,7 @@ import { selectWriteTarget } from "#modules/ifc/worker/georef/select-target";
  * TrueNorth) independent of the anchor kind.
  */
 export type Provenance =
-  | "file"
-  | "derived"
-  | "map"
-  | "manual"
-  | "survey"
-  | "default";
+  "file" | "derived" | "map" | "manual" | "survey" | "default";
 
 /**
  * Anchor couples Helmert params with the provenance of where they came
@@ -64,6 +59,10 @@ export type Provenance =
 export type Anchor =
   | { kind: "default" }
   | { kind: "file"; params: HelmertParams }
+  /** IfcSite RefLat/RefLon seed the user accepted from the anchor-card
+   *  prompt — computed from file contents, not read verbatim, hence
+   *  "derived" rather than "file". */
+  | { kind: "derived"; params: HelmertParams }
   | { kind: "manual"; params: HelmertParams }
   | { kind: "map"; params: HelmertParams }
   | { kind: "survey"; params: HelmertParams; points?: Array<PointPair> };
@@ -76,22 +75,6 @@ export function anchorParams(anchor: Anchor): HelmertParams | null {
  *  a multi-point fit (drops on edit/pick/reset/CRS-swap). */
 export function anchorSurveyPoints(anchor: Anchor): Array<PointPair> | null {
   return anchor.kind === "survey" && anchor.points ? anchor.points : null;
-}
-
-/**
- * Provenance for the anchor badge. When no anchor is set but
- * `effectiveParameters` was seeded from IfcSite lat/lon, we surface that
- * as "file" — the user is looking at a value derived from file contents,
- * not a placeholder.
- */
-export function anchorProvenance(
-  anchor: Anchor,
-  hasEffectiveParameters: boolean,
-): Provenance {
-  if (anchor.kind === "default") {
-    return hasEffectiveParameters ? "file" : "default";
-  }
-  return anchor.kind;
 }
 
 /**
@@ -109,7 +92,9 @@ export type AnchorAction =
   | { type: "resetToFile" }
   | { type: "picked"; params: HelmertParams }
   | { type: "solved"; params: HelmertParams; points?: Array<PointPair> }
-  | { type: "paramsReplaced"; params: HelmertParams };
+  | { type: "paramsReplaced"; params: HelmertParams }
+  /** User accepted the IfcSite seed proposal from the anchor card. */
+  | { type: "seedApplied"; params: HelmertParams };
 
 export function initialAnchor(metadata: IfcMetadata): Anchor {
   return metadata.existingGeoref
@@ -138,6 +123,9 @@ export function makeAnchorReducer(existing: ExistingGeoref | null) {
       }
       case "picked": {
         return { kind: "map", params: action.params };
+      }
+      case "seedApplied": {
+        return { kind: "derived", params: action.params };
       }
       case "solved": {
         return action.points
@@ -229,8 +217,7 @@ export function directionRatiosToBearing(
  * datum.
  */
 export type ReprojectError =
-  | TransformError
-  | { kind: "lookup-failed"; cause: CrsError };
+  TransformError | { kind: "lookup-failed"; cause: CrsError };
 
 /**
  * Round-trip the anchor's planar position through WGS84 lat/lon so it
