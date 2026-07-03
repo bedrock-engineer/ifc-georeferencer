@@ -13,16 +13,23 @@ import {
   IFCPROPERTYSINGLEVALUE,
   IFCREAL,
   IFCRELDEFINESBYPROPERTIES,
+  IFCSIUNIT,
   type IfcAPI,
 } from "web-ifc";
 
 import { emitLog } from "#lib/log";
 import type { HelmertParams } from "#modules/helmert/solve";
 import {
+  lengthUnitNameForMetres,
+  snapToKnownUnitFactor,
+  unitToMetres,
+} from "#modules/units/convert";
+import {
   buildHelmertFromFields,
   expressIDOf,
   findPrimarySiteId,
   findProjectId,
+  mapConversionUnitFactor,
   rawValue,
   rotationToAxisPair,
 } from "../shared";
@@ -96,7 +103,7 @@ export function readGeorefIfc2x3(
     projectedCrsID == null
       ? {}
       : readPsetProperties(ifcAPI, modelID, projectedCrsID);
-      
+
   const rawProjectedCrs =
     projectedCrsID == null
       ? null
@@ -118,9 +125,24 @@ export function readGeorefIfc2x3(
   const onDiskE = optionalPropertyNumber(mcProperties.Eastings, 0);
   const onDiskN = optionalPropertyNumber(mcProperties.Northings, 0);
   const onDiskH = optionalPropertyNumber(mcProperties.OrthogonalHeight, 0);
-  // ePSet_MapConversion has no MapUnit concept; values are conventionally
-  // in the IFC project's length unit. Pass `ifcMetresPerUnit` for both
-  // factors so the scale ratio is 1 (on-disk Scale == internal scale).
+
+  // The bSI ePset backport defines no unit mechanism, and two E/N/H
+  // conventions exist in the wild: CRS axis units with Scale as the unit
+  // bridge (IfcGref, this tool since the CRS-axis-unit fix) vs. project
+  // units with a bare geometric Scale (older versions of this tool).
+  // Resolve which one this file uses; see `resolveEpsetLengthUnit`.
+  const epsetUnit = resolveEpsetLengthUnit({
+    crsMapUnitLabel: rawProjectedCrs?.mapUnit ?? null,
+    onDiskScale,
+    ifcMetresPerUnit,
+  });
+  if (epsetUnit.status === "recovered-from-scale") {
+    emitLog({
+      source: "worker",
+      message: `ePSet_MapConversion carries no unit declaration — inferred ${epsetUnit.unitName ?? epsetUnit.metresPerUnit} for Eastings/Northings/OrthogonalHeight from Scale=${onDiskScale}`,
+    });
+  }
+
   const helmert = buildHelmertFromFields(
     {
       scale: onDiskScale,
@@ -131,7 +153,7 @@ export function readGeorefIfc2x3(
       orthogonalHeight: onDiskH,
     },
     {
-      mapUnitMetresPerUnit: ifcMetresPerUnit,
+      mapUnitMetresPerUnit: epsetUnit.metresPerUnit,
       ifcMetresPerUnit,
     },
   );
@@ -148,14 +170,18 @@ export function readGeorefIfc2x3(
     mapProjection: null,
     mapZone: null,
     mapUnit: null,
-    // ePset has no malformed-shift problem; "absent" here means the
-    // pset's MapUnit property is missing/blank, and the IFC2X3 reader
-    // falls back to project units (not METRE — see source-card label).
     mapUnitStatus: "absent" as const,
-    // ePSet_MapConversion E/N/H are in project units, so the factor used
-    // to reach canonical metres is the project's (Scale round-trips at 1).
     metresPerUnit: ifcMetresPerUnit,
   };
+  // The resolution above is the source of truth for how E/N/H were
+  // decoded — override whatever the pset-only pre-read put here so the
+  // UI's factor pairing (source-card unit row, rotation-card written-
+  // scale note) matches the conversion actually applied.
+  projectedCrs.metresPerUnit = epsetUnit.metresPerUnit;
+  projectedCrs.mapUnitStatus = epsetUnit.status;
+  if (projectedCrs.mapUnit == null && epsetUnit.unitName != null) {
+    projectedCrs.mapUnit = epsetUnit.unitName;
+  }
 
   return classifyGeorefRead({
     helmert,
@@ -183,8 +209,11 @@ function readRawProjectedCrsIfc2x3(
   ifcMetresPerUnit: number,
 ): RawProjectedCrs {
   // ePSet_ProjectedCRS mirrors the IFC4 IfcProjectedCRS attributes as
-  // free-form properties; readers in the wild may write any subset.
+  // free-form properties; readers in the wild may write any subset. The
+  // guide's Table 4 defines no MapUnit property, but this tool writes one
+  // (mirroring IFC4) and other files may carry it too.
   const mapUnit = optionalPropertyString(crsProperties.MapUnit);
+  const mapUnitMetres = mapUnit == null ? null : unitToMetres(mapUnit);
   return {
     entityName: "ePSet_ProjectedCRS",
     name: optionalPropertyString(crsProperties.Name),
@@ -197,9 +226,86 @@ function readRawProjectedCrsIfc2x3(
     // ePset has no malformed-shift problem (it's a free-form pset, not
     // an IfcSIUnit entity reference). Only two states: present or absent.
     mapUnitStatus: mapUnit == null ? "absent" : "explicit",
-    // The IFC2X3 reader converts ePset E/N/H with the project factor
-    // (no MapUnit concept), so that's the factor the UI must pair with.
+    // Provisional factor for the MapConversion-absent case (nothing to
+    // decode then; the UI still shows the unit row). When a MapConversion
+    // exists, `resolveEpsetLengthUnit` overrides this with the factor E/N/H
+    // were actually decoded with.
+    metresPerUnit: mapUnitMetres?.isOk()
+      ? mapUnitMetres.value
+      : ifcMetresPerUnit,
+  };
+}
+
+/**
+ * Which unit ePSet_MapConversion's Eastings/Northings/OrthogonalHeight are
+ * in. The bSI guide defines the ePsets with no unit mechanism at all (its
+ * ePSet_ProjectedCRS has no MapUnit property; the whole guide assumes
+ * metres throughout), so files in the wild follow one of two conventions:
+ *
+ *  - **CRS axis units**, Scale = geometric × project-unit/CRS-unit ratio
+ *    (IfcGref, this tool since the CRS-axis-unit fix) — the IFC4
+ *    IfcMapConversion semantic;
+ *  - **project units**, Scale = bare geometric (older versions of this
+ *    tool, geo.buildingsmart.nl deployments before the fix).
+ *
+ * Resolution order:
+ *  1. The `MapUnit` property on ePSet_ProjectedCRS — off-guide but
+ *     explicit in-file data (this tool writes it; so may others).
+ *  2. Invert the on-disk Scale (`ifcMetresPerUnit / Scale`) and snap to
+ *     the known-unit table. Snapping is what makes this safe: a solved
+ *     geometric scale ≠ 1 perturbs the raw quotient (0.0009998 instead of
+ *     0.001) and would silently shift Eastings by metres if used raw —
+ *     see `snapToKnownUnitFactor`. A snap that lands on the project unit
+ *     IS the legacy convention, reported as the project-unit fallback.
+ *  3. Project units — the pre-fix assumption, kept as the terminal
+ *     fallback so legacy files keep reading identically.
+ *
+ * The writer also stamps `IfcPropertySingleValue.Unit` on the three
+ * length properties (the schema-blessed declaration, for third-party
+ * consumers); the reader deliberately does NOT check it — every file
+ * that carries it also carries the MapUnit property and a snappable
+ * Scale, so reading it back would be dead redundancy today. Add a
+ * Unit-attribute step here if Unit-only files ever show up.
+ */
+function resolveEpsetLengthUnit(arguments_: {
+  crsMapUnitLabel: string | null;
+  onDiskScale: number;
+  ifcMetresPerUnit: number;
+}): {
+  metresPerUnit: number;
+  status: RawProjectedCrs["mapUnitStatus"];
+  unitName: string | null;
+} {
+  const { crsMapUnitLabel, onDiskScale, ifcMetresPerUnit } = arguments_;
+
+  if (crsMapUnitLabel != null) {
+    const metres = unitToMetres(crsMapUnitLabel);
+    if (metres.isOk()) {
+      return {
+        metresPerUnit: metres.value,
+        status: "explicit",
+        unitName: crsMapUnitLabel,
+      };
+    }
+    emitLog({
+      level: "warn",
+      source: "worker",
+      message: `ePSet_ProjectedCRS.MapUnit "${crsMapUnitLabel}" not recognised — falling back to Scale inversion for Eastings/Northings units`,
+    });
+  }
+
+  const snapped = snapToKnownUnitFactor(ifcMetresPerUnit / onDiskScale);
+  if (snapped != null && snapped !== ifcMetresPerUnit) {
+    return {
+      metresPerUnit: snapped,
+      status: "recovered-from-scale",
+      unitName: lengthUnitNameForMetres(snapped),
+    };
+  }
+  return {
     metresPerUnit: ifcMetresPerUnit,
+    status: "absent",
+    unitName: null,
   };
 }
 
@@ -224,13 +330,27 @@ function optionalPropertyNumber(v: unknown, fallback: number): number {
  * directly via web-ifc because there is no equivalent high-level API.
  *
  * `parameters` are codebase-canonical (metres + dimensionless scale).
- * ePSet_MapConversion has no MapUnit concept; values are conventionally in
- * the IFC project's length unit. We divide `Eastings/Northings/
- * OrthogonalHeight` by `ifcMetresPerUnit` at this boundary, symmetric with
- * the read path (where `buildHelmertFromFields` is called with
- * `mapUnitMetresPerUnit: ifcMetresPerUnit`). `Scale` is dimensionless and
- * round-trips unchanged for IFC2X3 (the source-unit / MapUnit ratio is 1
- * when both sides are the project length unit).
+ * Eastings/Northings/OrthogonalHeight are written in the **target CRS's
+ * axis unit** (`crsMetresPerUnit`, metres for essentially every real CRS),
+ * NOT the IFC project's length unit: the values are coordinates *in the
+ * TargetCRS*, and 185542000 is not an EPSG:7415 coordinate in any unit
+ * that CRS defines. `Scale` carries the bridge, per the IFC4
+ * IfcMapConversion semantic the ePsets backport:
+ *
+ *     Scale = geometric scale × ifcMetresPerUnit / crsMetresPerUnit
+ *
+ * (an mm project on a metre CRS writes Scale=0.001 — matching IfcGref).
+ *
+ * The bSI Geo-referencing User Guide v2.0 defines the ePsets without any
+ * unit mechanism — no MapUnit property, written under an explicit
+ * "everything is metres" simplification — so a bare ePset file cannot
+ * self-describe. We compensate twice over:
+ *  - the three length properties get the schema-blessed
+ *    `IfcPropertySingleValue.Unit` attribute (an IfcSIUnit METRE) when the
+ *    CRS axis unit is the metre, overriding the project default that
+ *    would otherwise apply to a bare IfcLengthMeasure;
+ *  - ePSet_ProjectedCRS gets a `MapUnit` property naming the unit,
+ *    mirroring IFC4's IfcProjectedCRS.MapUnit for ePset-convention readers.
  *
  * The psets attach to IfcProject, per the bSI Geo-referencing User Guide
  * v2.0 ("for the IFC2x3 implementation the ePSets are linked to
@@ -245,6 +365,7 @@ export function writeGeorefIfc2x3(
   verticalDatum: string | null,
   parameters: HelmertParams,
   ifcMetresPerUnit: number,
+  crsMetresPerUnit: number,
 ): void {
   const projectID = findProjectId(ifcAPI, modelID);
   if (projectID == null) {
@@ -264,9 +385,22 @@ export function writeGeorefIfc2x3(
     parameters.rotation,
   );
 
+  const crsUnitName = lengthUnitNameForMetres(crsMetresPerUnit);
+  const lengthUnitRef = buildLengthUnitRef(
+    ifcAPI,
+    modelID,
+    crsMetresPerUnit,
+    crsUnitName,
+  );
+
   const projectedCrsProperties = [
     property(ifcAPI, modelID, "Name", IFCLABEL, crsName),
   ];
+  if (crsUnitName != null) {
+    projectedCrsProperties.push(
+      property(ifcAPI, modelID, "MapUnit", IFCLABEL, crsUnitName),
+    );
+  }
   if (verticalDatum && verticalDatum.length > 0) {
     projectedCrsProperties.push(
       property(ifcAPI, modelID, "VerticalDatum", IFCIDENTIFIER, verticalDatum),
@@ -287,6 +421,12 @@ export function writeGeorefIfc2x3(
     projectedCrsPset,
   );
 
+  // On-disk Scale packs unit ratio × geometric scale, same as the IFC4
+  // writer. E/N/H are canonical metres divided down to CRS axis units.
+  const onDiskScale =
+    parameters.xScale *
+    mapConversionUnitFactor(ifcMetresPerUnit, crsMetresPerUnit);
+
   const mapConvPset = buildPset(
     ifcAPI,
     modelID,
@@ -299,28 +439,76 @@ export function writeGeorefIfc2x3(
         modelID,
         "Eastings",
         IFCLENGTHMEASURE,
-        parameters.easting / ifcMetresPerUnit,
+        parameters.easting / crsMetresPerUnit,
+        lengthUnitRef,
       ),
       property(
         ifcAPI,
         modelID,
         "Northings",
         IFCLENGTHMEASURE,
-        parameters.northing / ifcMetresPerUnit,
+        parameters.northing / crsMetresPerUnit,
+        lengthUnitRef,
       ),
       property(
         ifcAPI,
         modelID,
         "OrthogonalHeight",
         IFCLENGTHMEASURE,
-        parameters.height / ifcMetresPerUnit,
+        parameters.height / crsMetresPerUnit,
+        lengthUnitRef,
       ),
       property(ifcAPI, modelID, "XAxisAbscissa", IFCREAL, xAxisAbscissa),
       property(ifcAPI, modelID, "XAxisOrdinate", IFCREAL, xAxisOrdinate),
-      property(ifcAPI, modelID, "Scale", IFCREAL, parameters.xScale),
+      property(ifcAPI, modelID, "Scale", IFCREAL, onDiskScale),
     ],
   );
   writePsetRel(ifcAPI, modelID, ownerHistoryHandle, projectID, mapConvPset);
+
+  emitLog({
+    source: "worker",
+    message: `ePSet_MapConversion Eastings/Northings/OrthogonalHeight written in ${crsUnitName ?? `${crsMetresPerUnit} m`} (CRS axis unit); Scale=${onDiskScale} bridges project ${ifcMetresPerUnit} m/unit`,
+  });
+}
+
+/**
+ * Build the `IfcPropertySingleValue.Unit` reference for the three length
+ * properties: an `IfcSIUnit METRE` when the CRS axis unit is the metre
+ * (the ~universal case). Non-SI axis units (foot-based state-plane CRSs)
+ * would need the IfcConversionBasedUnit + IfcMeasureWithUnit +
+ * IfcDimensionalExponents machinery — not built until a real file needs
+ * it; the values are still correct CRS coordinates, and the MapUnit
+ * property on ePSet_ProjectedCRS still names the unit. Returns null in
+ * that case (property Unit slot stays `$`, with a log-panel note).
+ *
+ * The unit entity is written up front and shared by handle across all
+ * three properties — one `IFCSIUNIT` line in the file, not three.
+ */
+function buildLengthUnitRef(
+  ifcAPI: IfcAPI,
+  modelID: number,
+  crsMetresPerUnit: number,
+  crsUnitName: string | null,
+): Handle<unknown> | null {
+  if (crsMetresPerUnit !== 1) {
+    emitLog({
+      level: "warn",
+      source: "worker",
+      message: `CRS axis unit is ${crsUnitName ?? `${crsMetresPerUnit} m`} — Eastings/Northings/OrthogonalHeight written in that unit, but the property Unit attribute is omitted (only IfcSIUnit METRE is supported).`,
+    });
+    return null;
+  }
+  // Same web-ifc constructor quirk as the IFC4 writer: JS args are
+  // (UnitType, Prefix, Name); the STEP Dimensions slot is implicit.
+  const metreUnit = ifcAPI.CreateIfcEntity(
+    modelID,
+    IFCSIUNIT,
+    { type: 3, value: "LENGTHUNIT" },
+    null,
+    { type: 3, value: "METRE" },
+  );
+  ifcAPI.WriteLine(modelID, metreUnit);
+  return new Handle(metreUnit.expressID);
 }
 
 /**
@@ -436,6 +624,10 @@ function property(
   name: string,
   valueType: number,
   value: number | string,
+  // IfcPropertySingleValue.Unit — overrides the project-wide unit for
+  // this value per the IFC2x3 schema. Null leaves the slot `$` (value is
+  // in the project unit / reader-conventional unit).
+  unit: Handle<unknown> | null = null,
 ): any {
   return ifcAPI.CreateIfcEntity(
     modelID,
@@ -443,7 +635,7 @@ function property(
     ifcAPI.CreateIfcType(modelID, IFCIDENTIFIER, name),
     null,
     ifcAPI.CreateIfcType(modelID, valueType, value),
-    null,
+    unit,
   );
 }
 

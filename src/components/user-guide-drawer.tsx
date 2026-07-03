@@ -78,8 +78,11 @@ function GuideContent() {
           <li>
             <strong>From IfcSite.</strong> If the file has{" "}
             <Code>RefLatitude</Code>/<Code>RefLongitude</Code>, the app projects
-            them through the CRS and reads <Code>TrueNorth</Code> for the
-            rotation.
+            them through the CRS and offers the result as a seed — click{" "}
+            <Code>Use as anchor</Code> to apply it (<Code>TrueNorth</Code>{" "}
+            supplies the rotation). It's an offer, not automatic: authoring
+            tools often export a placeholder site location, so check the IfcSite
+            marker on the map first.
           </li>
 
           <li>
@@ -128,26 +131,26 @@ function GuideContent() {
         </p>
 
         <p>
-          Pre-4.3 schemas carry a single <Code>Scale</Code>. IFC 4.3 can
-          apply a factor to each axis independently via{" "}
-          <Code>IfcMapConversionScaled</Code>'s <Code>FactorX/Y/Z</Code>.
-          This tool edits them as <Code>Horizontal scale</Code> (X and Y
-          together) and <Code>Vertical scale</Code>; when they differ, the
-          file is saved with <Code>IfcMapConversionScaled</Code> instead of
-          plain <Code>IfcMapConversion</Code>.
+          Pre-4.3 schemas carry a single <Code>Scale</Code>. IFC 4.3 can apply a
+          factor to each axis independently via{" "}
+          <Code>IfcMapConversionScaled</Code>'s <Code>FactorX/Y/Z</Code>. This
+          tool edits them as <Code>Horizontal scale</Code> (X and Y together)
+          and <Code>Vertical scale</Code>; when they differ, the file is saved
+          with <Code>IfcMapConversionScaled</Code> instead of plain{" "}
+          <Code>IfcMapConversion</Code>.
         </p>
       </Section>
 
       <Section title="6. Save">
         <p>
-          Click <Code>Download georeferenced IFC</Code>. The writer rewrites
-          the georeferencing entities in-browser and offers{" "}
-          <Code>{`<name>_georeferenced.ifc`}</Code> as a download. The Save
-          card shows which entity will be written:{" "}
-          <Code>IfcMapConversion</Code> + <Code>IfcProjectedCRS</Code> on
-          IFC4, <Code>IfcMapConversionScaled</Code> (per-axis scale) or{" "}
-          <Code>IfcRigidOperation</Code> (translation-only) on IFC 4.3, and
-          the <Code>ePSet_MapConversion</Code> property set on IFC 2x3.
+          Click <Code>Download georeferenced IFC</Code>. The writer rewrites the
+          georeferencing entities in-browser and offers{" "}
+          <Code>{`<name>_georeferenced.ifc`}</Code> as a download. The Save card
+          shows which entity will be written: <Code>IfcMapConversion</Code> +{" "}
+          <Code>IfcProjectedCRS</Code> on IFC4,{" "}
+          <Code>IfcMapConversionScaled</Code> (per-axis scale) or{" "}
+          <Code>IfcRigidOperation</Code> (translation-only) on IFC 4.3, and the{" "}
+          <Code>ePSet_MapConversion</Code> property set on IFC 2x3.
         </p>
 
         <p>
@@ -166,10 +169,9 @@ function GuideContent() {
 
         <ul className="ml-4 list-disc space-y-1">
           <li>
-            <strong>Basemap.</strong> Switch between{" "}
-            <Code>OpenStreetMap</Code>, <Code>Topo NL (BRT)</Code>, and{" "}
-            <Code>Luchtfoto NL</Code>. The Dutch layers are only available
-            when the map is over the Netherlands.
+            <strong>Basemap.</strong> Switch between <Code>OpenStreetMap</Code>,{" "}
+            <Code>Topo NL (BRT)</Code>, and <Code>Luchtfoto NL</Code>. The Dutch
+            layers are only available when the map is over the Netherlands.
           </li>
 
           <li>
@@ -181,22 +183,21 @@ function GuideContent() {
           </li>
 
           <li>
-            <strong>X-ray.</strong> Shows IFC geometry below ground
-            (basements, pilings) through the terrain. Only applies in 3D
-            view, so switch to <Code>3D</Code> first.
+            <strong>X-ray.</strong> Shows IFC geometry below ground (basements,
+            pilings) through the terrain. Only applies in 3D view, so switch to{" "}
+            <Code>3D</Code> first.
           </li>
 
           <li>
-            <strong>Spaces.</strong> The <Code>IFC content</Code> section has
-            a <Code>Spaces</Code> checkbox to show or hide{" "}
-            <Code>IfcSpace</Code> geometry. It only appears when the file
-            contains spaces.
+            <strong>Spaces.</strong> The <Code>IFC content</Code> section has a{" "}
+            <Code>Spaces</Code> checkbox to show or hide <Code>IfcSpace</Code>{" "}
+            geometry. It only appears when the file contains spaces.
           </li>
 
           <li>
-            <strong>Overlays.</strong> Dutch reference layers (<Code>BGT</Code>
-            , <Code>Kadaster</Code>, <Code>2D BAG</Code>, <Code>3D BAG</Code>)
-            can be shown on top of the basemap to check the model against its
+            <strong>Overlays.</strong> Dutch reference layers (<Code>BGT</Code>,{" "}
+            <Code>Kadaster</Code>, <Code>2D BAG</Code>, <Code>3D BAG</Code>) can
+            be shown on top of the basemap to check the model against its
             surroundings.
           </li>
         </ul>

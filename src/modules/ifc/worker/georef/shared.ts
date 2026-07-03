@@ -36,17 +36,22 @@ export interface RawProjectedCrs {
   /**
    * Provenance for the metres-per-unit factor the reader resolved. Drives
    * the source-card MapUnit-row badge so users see how the absent /
-   * malformed cases were handled:
+   * malformed cases were handled.
+   *
+   * IFC4:
    *  - `explicit`              — mapUnit string is the source of truth
    *  - `absent`                — MapUnit attribute is `$`, defaulted to METRE
    *  - `recovered-from-scale`  — malformed Name=$, recovered via Scale inversion
    *  - `malformed-fallback`    — malformed Name=$, recovery failed → project unit
+   *
+   * IFC2X3 ePset (see `resolveEpsetLengthUnit`):
+   *  - `explicit`              — MapUnit pset property named the unit
+   *  - `recovered-from-scale`  — unit snapped from inverting on-disk Scale
+   *  - `absent`                — no declaration, fell back to project units
+   *                              (the legacy ePset convention)
    */
   mapUnitStatus:
-    | "explicit"
-    | "absent"
-    | "recovered-from-scale"
-    | "malformed-fallback";
+    "explicit" | "absent" | "recovered-from-scale" | "malformed-fallback";
   /**
    * MapUnit resolved to metres-per-unit — the *exact* factor the reader
    * used to convert this entity's Eastings/Northings/OrthogonalHeight into
@@ -142,9 +147,7 @@ export interface RawSourceCrs {
 export type MapConversionStatus = "real" | "placeholder" | "absent";
 
 export type ActiveCoordinateOperation =
-  | "map-conversion"
-  | "rigid-operation"
-  | "none";
+  "map-conversion" | "rigid-operation" | "none";
 
 export interface GeorefRead {
   existingGeoref: ExistingGeoref | null;

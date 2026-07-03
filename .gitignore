@@ -27,3 +27,4 @@ public/crs-index.json
 *.sw?
 
 test-files
+.playwright-mcp

@@ -13,6 +13,7 @@ import {
 import { CardHelpButton } from "../help-popover";
 import { NumberField } from "../number-field";
 import { ProvenanceBadge, type Provenance } from "../provenance-badge";
+import type { SeedProposal } from "#state/georef-status/types";
 
 interface AnchorCardProps {
   parameters: HelmertParams | null;
@@ -31,6 +32,14 @@ interface AnchorCardProps {
    * ~170 m–wrong survey point. See docs/crs-datum-grids.md (Q11).
    */
   pickBlockedReason?: string | null;
+  /**
+   * IfcSite-derived anchor seed on offer — rendered as an inline
+   * accept/ignore prompt instead of auto-filling the fields, because
+   * site refs are often placeholders. Null once anchored or dismissed.
+   */
+  seedProposal: SeedProposal | null;
+  onAcceptSeed: () => void;
+  onDismissSeed: () => void;
   onEdit: (next: HelmertParams) => void;
   onStartPick: () => void;
   onCancelPick: () => void;
@@ -44,6 +53,9 @@ export function AnchorCard({
   isPicking,
   canResetToFile,
   pickBlockedReason,
+  seedProposal,
+  onAcceptSeed,
+  onDismissSeed,
   onEdit,
   onStartPick,
   onCancelPick,
@@ -133,6 +145,15 @@ export function AnchorCard({
         <ProvenanceBadge provenance={provenance} />
       </div>
 
+      {seedProposal && !isPicking && (
+        <SeedProposalNotice
+          proposal={seedProposal}
+          activeCrs={activeCrs}
+          onAccept={onAcceptSeed}
+          onDismiss={onDismissSeed}
+        />
+      )}
+
       <div className="space-y-2">
         <NumberField
           label="Easting"
@@ -195,6 +216,63 @@ export function AnchorCard({
       )}
     </div>
   );
+}
+
+interface SeedProposalNoticeProps {
+  proposal: SeedProposal;
+  activeCrs: CrsDef | null;
+  onAccept: () => void;
+  onDismiss: () => void;
+}
+
+/**
+ * Inline accept/ignore prompt for the IfcSite-derived anchor seed. The
+ * seed is deliberately not auto-applied: RefLatitude/RefLongitude is
+ * whatever the authoring tool exported, and placeholder locations are
+ * common (Revit's untouched default is in Boston). The IfcSite marker is
+ * already on the map, so the user can eyeball it before committing.
+ */
+function SeedProposalNotice({
+  proposal,
+  activeCrs,
+  onAccept,
+  onDismiss,
+}: SeedProposalNoticeProps) {
+  const { latitude, longitude } = proposal.site;
+  const metresPerUnit = activeCrs?.metresPerUnit ?? 1;
+  const unit = describeCrsUnit(activeCrs).short;
+  const easting = (proposal.params.easting / metresPerUnit).toFixed(2);
+  const northing = (proposal.params.northing / metresPerUnit).toFixed(2);
+
+  return (
+    <div className="space-y-2 rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+      <p>
+        This file locates its IfcSite at {formatLatitude(latitude)},{" "}
+        {formatLongitude(longitude)} — Easting {easting} {unit}, Northing{" "}
+        {northing} {unit} in the target CRS.
+      </p>
+      <p>
+        Authoring tools often export a placeholder location. Check the IfcSite
+        marker on the map before using it as the anchor.
+      </p>
+      <div className="flex gap-2">
+        <Button variant="primary" size="sm" onPress={onAccept}>
+          Use as anchor
+        </Button>
+        <Button variant="secondary" size="sm" onPress={onDismiss}>
+          Ignore
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function formatLatitude(latitude: number): string {
+  return `${Math.abs(latitude).toFixed(6)}°${latitude >= 0 ? "N" : "S"}`;
+}
+
+function formatLongitude(longitude: number): string {
+  return `${Math.abs(longitude).toFixed(6)}°${longitude >= 0 ? "E" : "W"}`;
 }
 
 function describeValidation(

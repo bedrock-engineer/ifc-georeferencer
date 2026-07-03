@@ -1,7 +1,7 @@
 import type { XYZ } from "#modules/helmert/solve";
 import { type LoGeoref } from "#modules/ifc/lo-geo-ref";
 import type { IfcMetadata, RawProjectedCrs } from "#modules/ifc/worker";
-import { unitToMetres } from "#modules/units/convert";
+import { lengthUnitNameForMetres, unitToMetres } from "#modules/units/convert";
 import { describeIfcUnit } from "#modules/units/format";
 import { Button } from "../../input/button";
 import { Card } from "../card";
@@ -98,23 +98,32 @@ export function SourceCard({
   const projectLengthUnit = describeIfcUnit(metadata.lengthUnit);
   // MapConversion E/N/H are on-disk values in MapUnit when present.
   // When MapUnit is absent: IFC4 reader defaults to METRE (projected CRS
-  // axes are metres by universal convention — see readMapUnitMetresPerUnit).
-  // IFC2X3 ePset has no MapUnit concept; its convention is project units.
+  // axes are metres by universal convention — see readMapUnitMetresPerUnit);
+  // the IFC2X3 ePset reader resolves per `resolveEpsetLengthUnit` (property
+  // Unit attribute, MapUnit pset property, Scale inversion, then project
+  // units). Display the unit the reader *actually decoded with*: the
+  // explicit name when the file carries one, else the name recovered from
+  // the resolved metres-per-unit factor, else the schema fallback.
   const mapUnitName = metadata.rawProjectedCrs?.mapUnit ?? null;
+  const resolvedUnitName = metadata.rawProjectedCrs
+    ? lengthUnitNameForMetres(metadata.rawProjectedCrs.metresPerUnit)
+    : null;
   const mapUnitFallbackName = isEpsetSchema ? metadata.lengthUnit : "METRE";
   const mapUnitShort = describeIfcUnit(
-    mapUnitName ?? mapUnitFallbackName,
+    mapUnitName ?? resolvedUnitName ?? mapUnitFallbackName,
   ).short;
   // Badge text for the MapUnit row when the reader couldn't pin down a
-  // unit from the file. Picked from (status, schema): IFC4 defaults to
-  // METRE on absent; the malformed-shift pattern (Revit + ifcopenshell
-  // round-trip, e.g. via the old Flask app) is either recovered from
-  // Scale or falls back to project unit; IFC2X3 ePset has no MapUnit
-  // entity and falls back to project unit by ePset convention.
+  // unit from an explicit declaration. Picked from (status, schema): IFC4
+  // defaults to METRE on absent; the malformed-shift pattern (Revit +
+  // ifcopenshell round-trip, e.g. via the old Flask app) is either
+  // recovered from Scale or falls back to project unit; IFC2X3 ePset
+  // infers from Scale or falls back to project unit (the legacy ePset
+  // convention).
   const mapUnitFallbackLabel = describeMapUnitFallback({
     status: metadata.rawProjectedCrs?.mapUnitStatus ?? "absent",
     isEpsetSchema,
     projectLengthUnitShort: projectLengthUnit.short,
+    resolvedUnitShort: mapUnitShort,
   });
 
   const mapConversionEntity =
@@ -170,10 +179,10 @@ export function SourceCard({
         <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           IFC2x3 has no native <code>IfcMapConversion</code> or{" "}
           <code>IfcProjectedCRS</code> entity. Georeferencing is encoded as
-          property sets on <code>IfcSite</code> by convention (
+          property sets on <code>IfcProject</code> or <code>IfcSite</code> (
           <code>ePSet_MapConversion</code>, <code>ePSet_ProjectedCRS</code>) —
           readable by tools that look for these psets, but not part of the IFC
-          spec.
+          spec. This app writes these to <code>IfcProject</code>.
         </p>
       )}
 
@@ -421,14 +430,19 @@ function describeMapUnitFallback({
   status,
   isEpsetSchema,
   projectLengthUnitShort,
+  resolvedUnitShort,
 }: {
   status: RawProjectedCrs["mapUnitStatus"];
   isEpsetSchema: boolean;
   projectLengthUnitShort: string;
+  resolvedUnitShort: string;
 }) {
   // Status comes from the reader's classification of the MapUnit entity.
-  // The schema axis only matters for `absent` — IFC4 defaults to METRE,
-  // IFC2X3 ePset has no MapUnit concept and falls back to project unit.
+  // The schema axis matters for `absent` (IFC4 defaults to METRE, IFC2X3
+  // ePset falls back to project units — the legacy ePset convention) and
+  // for `recovered-from-scale` (IFC4's is a malformed-IfcSIUnit repair;
+  // the ePset one is the normal path for IfcGref-style files, which have
+  // no way to declare a unit).
   switch (status) {
     case "explicit": {
       // Only reached when raw.mapUnit happens to be null while status is
@@ -441,7 +455,9 @@ function describeMapUnitFallback({
         : "absent — assumed METRE";
     }
     case "recovered-from-scale": {
-      return "malformed — recovered METRE from Scale";
+      return isEpsetSchema
+        ? `no unit declared — inferred ${resolvedUnitShort} from Scale`
+        : "malformed — recovered METRE from Scale";
     }
     case "malformed-fallback": {
       return `malformed — fell back to project unit (${projectLengthUnitShort})`;

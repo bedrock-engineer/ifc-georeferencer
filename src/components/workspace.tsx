@@ -125,7 +125,12 @@ export function Workspace({
           continue;
         }
         seenFindingsRef.current.add(key);
-        emitLog({ level: "warn", message: findingToLogMessage(finding) });
+        emitLog({
+          // The seed offer is expected behavior with a verify-nudge, not
+          // a problem — don't render it in warning colors.
+          level: finding.kind === "ifc-site-seed-available" ? "info" : "warn",
+          message: findingToLogMessage(finding),
+        });
       }
     },
     [view.findings],
@@ -139,6 +144,27 @@ export function Workspace({
   // input (map overlays, write, framing, pick). See GeorefView docs.
   const { editableParameters, effectiveParameters, provenance, references } =
     view;
+
+  // "Ignore" on the seed prompt is per-file (Workspace remounts per file
+  // via `key={filename}`), not per-CRS — once the user has waved the
+  // IfcSite location off, re-offering it on every CRS change is nagging.
+  const [seedDismissed, setSeedDismissed] = useState(false);
+  const seedProposal = seedDismissed ? null : view.seedProposal;
+
+  function acceptSeed() {
+    if (!seedProposal) {
+      return;
+    }
+    dispatchAnchor({ type: "seedApplied", params: seedProposal.params });
+    frameNow(nextSignalsAfter(seedProposal.params));
+    emitLog({
+      message:
+        `Anchor set from IfcSite RefLatitude/RefLongitude → ` +
+        `E ${seedProposal.params.easting.toFixed(2)}, ` +
+        `N ${seedProposal.params.northing.toFixed(2)} m`,
+    });
+  }
+
   const pickBlockedReason = derivePickBlockedReason(view, activeCrs);
   const saveBlockedReason = deriveSaveBlockedReason(view);
   const saveWarning = deriveSaveWarning(activeCrs, verticalDatum);
@@ -539,6 +565,11 @@ export function Workspace({
                     isPicking={isPickingAnchor}
                     canResetToFile={Boolean(metadata.existingGeoref)}
                     pickBlockedReason={pickBlockedReason}
+                    seedProposal={seedProposal}
+                    onAcceptSeed={acceptSeed}
+                    onDismissSeed={() => {
+                      setSeedDismissed(true);
+                    }}
                     onEdit={(params) => {
                       dispatchAnchor({ type: "edited", params });
                     }}
@@ -582,6 +613,7 @@ export function Workspace({
             dispatchAnchor({ type: "edited", params });
           }}
           metadata={metadata}
+          activeCrs={activeCrs}
         />
       </Sidebar>
 

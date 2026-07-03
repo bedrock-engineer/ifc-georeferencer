@@ -1,6 +1,10 @@
+import type { CrsDef } from "#modules/crs";
 import type { HelmertParams } from "#modules/helmert/solve";
 import type { IfcMetadata } from "#modules/ifc/worker";
-import { mapConversionUnitFactor } from "#modules/units/convert";
+import {
+  lengthUnitNameForMetres,
+  mapConversionUnitFactor,
+} from "#modules/units/convert";
 import { Card } from "../card";
 import { NumberField } from "../number-field";
 import { ProvenanceBadge, type Provenance } from "../provenance-badge";
@@ -10,6 +14,7 @@ interface RotationCardProps {
   provenance: Provenance;
   onParametersChange: (next: HelmertParams) => void;
   metadata: IfcMetadata;
+  activeCrs: CrsDef | null;
 }
 
 function formatScale(n: number): string {
@@ -21,6 +26,7 @@ export function RotationCard({
   provenance,
   onParametersChange,
   metadata,
+  activeCrs,
 }: RotationCardProps) {
   const hasParams = parameters !== null;
   const fromFile = Boolean(metadata.existingGeoref);
@@ -58,24 +64,35 @@ export function RotationCard({
     parameters !== null && parameters.xScale !== parameters.yScale;
 
   // The scale fields edit the dimensionless geometric scale (metres in /
-  // metres out). The file stores it multiplied by the project-unit → MapUnit
+  // metres out). The file stores it multiplied by the project-unit → map-unit
   // ratio, so a "1" here can land as "0.001" in IfcMapConversion.Scale.
   // Surface the literal on-disk value ONLY when the units diverge — when the
-  // project is already in MapUnit the note would just restate the input.
-  // The MapUnit factor is the exact one the worker used for E/N/H (already
-  // reflects absent→METRE / ePset→project-unit), so no re-derivation here.
-  const mapMetresPerUnit = metadata.rawProjectedCrs?.metresPerUnit ?? 1;
-  const unitFactor = mapConversionUnitFactor(metadata.metresPerUnit, mapMetresPerUnit);
-  const mapUnit = metadata.rawProjectedCrs?.mapUnit;
+  // project is already in the map unit the note would just restate the input.
+  //
+  // The factor must mirror what the *writer* will use, which differs by
+  // schema: IFC4+ preserves the file's IfcProjectedCRS.MapUnit (the exact
+  // factor the reader surfaced, METRE for fresh files); IFC2X3 writes
+  // E/N/H in the target CRS's axis unit (the ePsets can't carry a MapUnit
+  // entity, so the reader-side factor may reflect a legacy project-unit
+  // file and would predict the wrong on-disk Scale).
+  const isEpsetSchema = metadata.schema === "IFC2X3";
+  const mapMetresPerUnit = isEpsetSchema
+    ? (activeCrs?.metresPerUnit ?? 1)
+    : (metadata.rawProjectedCrs?.metresPerUnit ?? 1);
+  const unitFactor = mapConversionUnitFactor(
+    metadata.metresPerUnit,
+    mapMetresPerUnit,
+  );
+  const mapUnit = isEpsetSchema
+    ? activeCrs && lengthUnitNameForMetres(activeCrs.metresPerUnit)
+    : metadata.rawProjectedCrs?.mapUnit;
 
   function writtenScaleNote(geometricScale: number | null): string | null {
     if (geometricScale == null || unitFactor === 1) {
       return null;
     }
     const written = geometricScale * unitFactor;
-    const unitCause = mapUnit
-      ? ` (${metadata.lengthUnit} → ${mapUnit})`
-      : "";
+    const unitCause = mapUnit ? ` (${metadata.lengthUnit} → ${mapUnit})` : "";
     return `↳ Writes ${formatScale(written)} to file${unitCause}`;
   }
 
@@ -185,7 +202,7 @@ export function RotationCard({
                   : writtenScaleNote(parameters?.xScale ?? null)
               }
             />
-            
+
             <NumberField
               label="Vertical scale"
               value={parameters?.zScale ?? null}
