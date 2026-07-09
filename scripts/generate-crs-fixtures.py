@@ -63,6 +63,29 @@ FIXTURES_BY_CODE: dict[int, list[tuple[float, float]]] = {
         (75000, 75000),     # Luxembourg City area
         (80000, 100000),    # near LU origin
     ],
+    # Caribbean Netherlands (BES islands) — MANUAL_ENTRIES in
+    # build-crs-manifest.mjs. PROJ 9.5.1's EPSG database predates these
+    # codes, so they are skipped (with a warning) until pyproj ships a
+    # newer EPSG snapshot. Until then the reference check is the exact
+    # EPSG position-vector formula, which proj4js was verified to
+    # reproduce to <1 mm at these points.
+    # Bonaire — Bonaire DPnet
+    10759: [
+        (21994.60, 19613.60),   # Kralendijk
+        (23209.56, 21423.99),   # projection origin
+    ],
+    # Saba — Saba DPnet
+    10641: [
+        (3444.92, 2324.46),     # The Bottom
+    ],
+    # Sint Eustatius — Sint Eustatius DPnet long
+    10745: [
+        (501641.01, 1933344.06),  # Oranjestad
+    ],
+    # BES compounds — same horizontal as the projected entries above
+    10764: [(21994.60, 19613.60)],
+    10645: [(3444.92, 2324.46)],
+    10747: [(501641.01, 1933344.06)],
 }
 
 
@@ -100,9 +123,16 @@ def main() -> int:
                 f"warn: no fixture points defined for EPSG:{code}\n"
             )
             continue
-        transformer = pyproj.Transformer.from_crs(
-            f"EPSG:{code}", "EPSG:4326", always_xy=True
-        )
+        try:
+            transformer = pyproj.Transformer.from_crs(
+                f"EPSG:{code}", "EPSG:4326", always_xy=True
+            )
+        except pyproj.exceptions.CRSError:
+            sys.stderr.write(
+                f"warn: EPSG:{code} unknown to this PROJ version "
+                f"({pyproj.__proj_version__}) — skipped\n"
+            )
+            continue
         entries = []
         for proj_x, proj_y in FIXTURES_BY_CODE[code]:
             lon, lat = transformer.transform(proj_x, proj_y)

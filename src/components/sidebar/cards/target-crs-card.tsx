@@ -1,11 +1,12 @@
-import { useTransition } from "react";
 import { type CrsLookupState } from "#modules/crs";
+import { retryCrsOverride } from "#modules/crs/manifest";
 import {
   isRetryableOverrideError,
   type AccuracyStatus,
   type OverrideError,
 } from "#modules/crs/types";
-import { retryCrsOverride } from "#modules/crs/manifest";
+import { useTransition } from "react";
+import { Link } from "react-aria-components";
 import { Button } from "../../input/button";
 import { Card } from "../card";
 import { ProvenanceBadge, type Provenance } from "../provenance-badge";
@@ -99,6 +100,9 @@ function LookupDisplay({ state }: LookupDisplayProps) {
   }
 
   if (state.kind === "error") {
+    if (state.errorKind === "not-found") {
+      return <CrsNotFound code={state.code} />;
+    }
     return (
       <p className="text-xs text-red-700">
         EPSG:{state.code} — {state.errorKind.replaceAll("-", " ")}
@@ -117,6 +121,50 @@ function LookupDisplay({ state }: LookupDisplayProps) {
       <AccuracyBadge def={def} />
     </div>
   );
+}
+
+interface CrsNotFoundProps {
+  code: number;
+}
+
+/**
+ * "not-found" gets its own rendering: a valid EPSG code that isn't in the
+ * bundled index is more likely a gap in our manifest than a user typo, so
+ * offer a prefilled GitHub issue to request it.
+ */
+function CrsNotFound({ code }: CrsNotFoundProps) {
+  return (
+    <div className="space-y-1 text-xs">
+      <p className="text-red-700">
+        EPSG:{code} isn't in the bundled CRS index.
+      </p>
+      <p className="text-slate-600">
+        Believe it's missing?{" "}
+        <Link
+          href={missingCrsIssueUrl(code)}
+          target="_blank"
+          rel="noreferrer"
+          className="text-blue-700 underline hover:text-blue-900"
+        >
+          Open a GitHub issue
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
+function missingCrsIssueUrl(code: number): string {
+  const params = new URLSearchParams({
+    title: `CRS addition: EPSG:${code}`,
+    body: [
+      `Please add support for EPSG:${code} (https://epsg.io/${code}).`,
+      "",
+      "**Where is this CRS used?** (country/region, typical projects)",
+      "",
+    ].join("\n"),
+  });
+  return `https://github.com/bedrock-engineer/ifc-gref/issues/new?${params.toString()}`;
 }
 
 interface AccuracyBadgeProps {

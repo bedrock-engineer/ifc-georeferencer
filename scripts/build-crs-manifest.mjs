@@ -120,6 +120,123 @@ const CRS_OVERRIDES = {
   },
 };
 
+/**
+ * Entries absent from epsg-index entirely. epsg-index 2.0.0 snapshots an
+ * EPSG dataset that predates codes in the 10000+ range, so CRSs published
+ * since (~2022) never reach the loop below. Hand-maintained here, same
+ * shape as the emitted manifest entries; appended after the epsg-index
+ * pull with a collision check.
+ *
+ * Current contents: the Caribbean Netherlands (BES islands — Bonaire,
+ * Sint Eustatius, Saba). Their modern NSGI cadastral CRSs (DPnet datums,
+ * EPSG v11+) are the official systems for these municipalities. proj4
+ * strings and 7-parameter Helmert transforms taken from the EPSG registry
+ * via epsg.io; EPSG states ~1 m accuracy for the Helmert to WGS 84.
+ */
+const BES_ACCURACY_NOTE = "~1 m via EPSG Helmert to WGS 84 (NSGI)";
+
+const SABA_AREA =
+  "Bonaire, Sint Eustatius and Saba (BES Islands or Caribbean Netherlands) - Saba - onshore.";
+const SABA_BBOX = [17.71, -63.31, 17.56, -63.16];
+const SABA_PROJ4 =
+  "+proj=tmerc +lat_0=0 +lon_0=-63 +k=0.9996 +x_0=29973.97 +y_0=-1947925.94 " +
+  "+ellps=intl " +
+  "+towgs84=1138.7432,-2064.4761,110.7016,-214.615206,479.360036,-164.703951,-402.32073 " +
+  "+units=m +no_defs +type=crs";
+
+const STATIA_AREA =
+  "Bonaire, Sint Eustatius and Saba (BES Islands or Caribbean Netherlands) - Sint Eustatius - onshore.";
+const STATIA_BBOX = [17.58, -63.05, 17.41, -62.88];
+const STATIA_PROJ4 =
+  "+proj=utm +zone=20 +ellps=intl " +
+  "+towgs84=1276.2485,-2016.6406,667.4403,-101.005288,212.913401,-68.43277,-431.59604 " +
+  "+units=m +no_defs +type=crs";
+
+const BONAIRE_AREA =
+  "Bonaire, Sint Eustatius and Saba (BES Islands or Caribbean Netherlands) - Bonaire - onshore.";
+const BONAIRE_BBOX = [12.36, -68.47, 11.97, -68.14];
+const BONAIRE_PROJ4 =
+  "+proj=tmerc +lat_0=12.180658675 +lon_0=-68.2518022805556 +k=1 " +
+  "+x_0=23209.56 +y_0=21423.99 +ellps=intl " +
+  "+towgs84=-366.1939,-115.0688,-776.7039,20.96308,16.462749,-14.276379,-12.809 " +
+  "+units=m +no_defs +type=crs";
+
+const MANUAL_ENTRIES = {
+  projected: [
+    {
+      code: 10641,
+      name: "Saba DPnet",
+      proj4: SABA_PROJ4,
+      area: SABA_AREA,
+      bbox: SABA_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+    {
+      code: 10745,
+      name: "Sint Eustatius DPnet long",
+      proj4: STATIA_PROJ4,
+      area: STATIA_AREA,
+      bbox: STATIA_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+    {
+      code: 10759,
+      name: "Bonaire DPnet",
+      proj4: BONAIRE_PROJ4,
+      area: BONAIRE_AREA,
+      bbox: BONAIRE_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+  ],
+  compound: [
+    {
+      code: 10645,
+      name: "Saba DPnet + Saba height",
+      proj4: SABA_PROJ4,
+      area: SABA_AREA,
+      bbox: SABA_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+    {
+      code: 10747,
+      name: "Sint Eustatius DPnet long + Sint Eustatius height",
+      proj4: STATIA_PROJ4,
+      area: STATIA_AREA,
+      bbox: STATIA_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+    {
+      code: 10764,
+      name: "Bonaire DPnet + Bonaire height",
+      proj4: BONAIRE_PROJ4,
+      area: BONAIRE_AREA,
+      bbox: BONAIRE_BBOX,
+      accuracyNote: BES_ACCURACY_NOTE,
+      grid: null,
+    },
+  ],
+  vertical: [
+    { code: 10642, name: "Saba height", area: SABA_AREA, bbox: SABA_BBOX },
+    {
+      code: 10740,
+      name: "Sint Eustatius height",
+      area: STATIA_AREA,
+      bbox: STATIA_BBOX,
+    },
+    {
+      code: 10763,
+      name: "Bonaire height",
+      area: BONAIRE_AREA,
+      bbox: BONAIRE_BBOX,
+    },
+  ],
+};
+
 function trimmedOrNull(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -194,6 +311,28 @@ for (const entry of Object.values(raw)) {
   }
 }
 
+// Append MANUAL_ENTRIES, refusing silently-shadowed codes: if epsg-index
+// starts shipping one of these (dataset upgrade), the manual copy must be
+// deleted rather than fight over which definition wins.
+const existingCodes = new Set(
+  [...compound, ...projected, ...vertical].map((e) => e.code),
+);
+const manualCollisions = [
+  ...MANUAL_ENTRIES.projected,
+  ...MANUAL_ENTRIES.compound,
+  ...MANUAL_ENTRIES.vertical,
+]
+  .filter((e) => existingCodes.has(e.code))
+  .map((e) => e.code);
+if (manualCollisions.length > 0) {
+  throw new Error(
+    `MANUAL_ENTRIES codes already present in epsg-index — remove the manual copies: ${manualCollisions.join(", ")}`,
+  );
+}
+projected.push(...MANUAL_ENTRIES.projected);
+compound.push(...MANUAL_ENTRIES.compound);
+vertical.push(...MANUAL_ENTRIES.vertical);
+
 const byCode = (a, b) => a.code - b.code;
 compound.sort(byCode);
 projected.sort(byCode);
@@ -208,9 +347,10 @@ const bytes = (await readFile(outPath)).byteLength;
 // Sanity check: every override should have matched an entry in the input.
 // If it didn't, the EPSG code is wrong or epsg-index dropped the entry.
 const overriddenCodes = new Set(Object.keys(CRS_OVERRIDES).map(Number));
+// Manual entries also carry accuracyNote — count only override codes here.
 const matched = new Set(
   [...compound, ...projected]
-    .filter((e) => e.accuracyNote != null)
+    .filter((e) => e.accuracyNote != null && overriddenCodes.has(e.code))
     .map((e) => e.code),
 );
 const missing = [...overriddenCodes].filter((c) => !matched.has(c));
@@ -229,3 +369,8 @@ console.log(
 console.log(
   `  Applied ${matched.size} per-CRS overrides: ${[...matched].sort((a, b) => a - b).join(", ")}`,
 );
+const manualCount =
+  MANUAL_ENTRIES.projected.length +
+  MANUAL_ENTRIES.compound.length +
+  MANUAL_ENTRIES.vertical.length;
+console.log(`  Appended ${manualCount} manual entries (BES islands)`);

@@ -31,8 +31,10 @@ const xyzSchema = z.object({
   z: z.number(),
 });
 
+const VERSION = 1 as const;
+
 const sidecarSchema = z.object({
-  formatVersion: z.literal(1),
+  formatVersion: z.literal(VERSION),
   app: z.object({
     name: z.literal("ifcgref"),
     version: z.string(),
@@ -75,7 +77,7 @@ interface BuildSidecarInput {
 export function buildSidecar(input: BuildSidecarInput): Sidecar {
   const { parameters: p } = input;
   return {
-    formatVersion: 1,
+    formatVersion: VERSION,
     app: { name: "ifcgref", version: __APP_VERSION__ },
     exportedAt: new Date().toISOString(),
     source: {
