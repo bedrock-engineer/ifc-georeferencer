@@ -5,7 +5,12 @@
  * countries / providers
  */
 
-import { MAPTERHORN_SOURCE_ID, MAPTERHORN_TERRAIN, OSM } from "./global";
+import {
+  MAPTERHORN_SOURCE_ID,
+  MAPTERHORN_TERRAIN,
+  OPENTOPOMAP,
+  OSM,
+} from "./global";
 import {
   BAG_3D,
   PDOK_BAG_2D,
@@ -18,6 +23,7 @@ import type { BasemapDef, OverlayDef } from "./types";
 
 export const BASEMAPS: ReadonlyArray<BasemapDef> = [
   OSM,
+  OPENTOPOMAP,
   PDOK_BRT,
   PDOK_LUCHTFOTO,
 ];

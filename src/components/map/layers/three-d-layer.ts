@@ -6,7 +6,9 @@
  * they stay out of the initial bundle until the user flips to the 3D view.
  *
  * The pattern (shared GL context, MercatorCoordinate anchoring, renderer.resetState)
- * mirrors the Flask app's view3D.html.
+ * follows the official MapLibre example "Add a 3D model using three.js"
+ * (https://maplibre.org/maplibre-gl-js/docs/examples/add-3d-model/), the same
+ * example the Flask app's view3D.html is based on.
  */
 
 import type { HelmertParams, XYZ } from "#modules/helmert/solve";

@@ -22,6 +22,25 @@ export const OSM: BasemapDef = {
   layer: { id: "osm", type: "raster", source: "osm" },
 };
 
+export const OPENTOPOMAP: BasemapDef = {
+  id: "opentopomap",
+  label: "OpenTopoMap",
+  region: "global",
+  source: {
+    type: "raster",
+    tiles: [
+      "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+      "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
+      "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
+    ],
+    tileSize: 256,
+    maxzoom: 17,
+    attribution:
+      '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | map style © <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+  },
+  layer: { id: "opentopomap", type: "raster", source: "opentopomap" },
+};
+
 export const MAPTERHORN_SOURCE_ID = "mapterhorn";
 
 export const MAPTERHORN_TERRAIN: SourceSpecification = {
